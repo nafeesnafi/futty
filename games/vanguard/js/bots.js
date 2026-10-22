@@ -52,6 +52,7 @@
       box(head, 0.22, 0.24, 0.24, mSkin, 0, 0, 0);
       const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.165, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), mVest);
       helmet.position.y = 0.04; helmet.castShadow = true; head.add(helmet);
+      this.helmet = helmet; this.mats = { pants: mPants, vest: mVest, skin: mSkin, band: mBand };
       box(head, 0.2, 0.05, 0.03, mDark, 0, 0.03, -0.125); // goggles strap
       // arms holding the rifle forward
       const ra = box(upper, 0.12, 0.12, 0.42, mVest, 0.2, 0.4, -0.18); ra.rotation.x = 0.25;
@@ -121,6 +122,7 @@
     }
 
     hear(src, now) {
+      if (this.follow || this.deaf) return;
       if (this.state === 'engage' && this.visible) return;
       if (this.state === 'cover') return;
       if (this.lastKnown && this.lastKnown.distanceToSquared(src.pos) < 36 && now - this.repathT < 1.5) return;
@@ -136,7 +138,7 @@
         // snap attention toward the shooter
         this.aimYaw = Math.atan2(-(attacker.pos.x - this.pos.x), -(attacker.pos.z - this.pos.z));
       }
-      if (this.health < 35 && this.state !== 'cover') this.seekCover(now);
+      if (this.health < 35 && this.state !== 'cover' && !this.hold) this.seekCover(now);
     }
 
     seekCover(now) {
@@ -200,6 +202,21 @@
 
       switch (this.state) {
         case 'patrol': {
+          if (this.hold) { // campaign: hold a position and scan the room
+            this.desire(0, 0, dt);
+            lookYaw = this.holdYaw + Math.sin(now * 0.4 + this.pos.x) * 0.7;
+            break;
+          }
+          if (this.follow) { // campaign squadmate: stay near the leader
+            const f = this.follow, d = Math.hypot(f.pos.x - this.pos.x, f.pos.z - this.pos.z);
+            if (d > 3.5 && now > this.repathT + 0.8) {
+              this.repathT = now;
+              const n = N.nearest(f.pos.x + (this.fx || 0), f.pos.y, f.pos.z + (this.fz || 0)); if (n) this.goTo(n);
+            }
+            if (d > 2.6 && this.path && this.pi < this.path.length) { speed = d > 9 ? 5.8 : 3.6; this.followPath(dt, speed, now); }
+            else { this.desire(0, 0, dt); if (f.yaw !== undefined) lookYaw = f.yaw; }
+            break;
+          }
           if (!this.path || this.pi >= this.path.length) {
             // wander: random reachable node, biased toward the map interior
             let n = N.random();
@@ -314,14 +331,14 @@
       let err = DIFF.aimErr[g.diff] + ts * 0.3 + ms * 0.4;
       if (def.id === 'sniper') err *= 0.5;
       if (def.id === 'smg' && d > 20) err *= 1.4;
-      err *= D2R;
+      err *= D2R * (this.aimMul || 1);
       const aimY = t.pos.y + (this.aimHead ? t.height - 0.17 : t.height * 0.6);
       const ox = this.pos.x, oy = this.pos.y + this.height - 0.2, oz = this.pos.z;
       v1.set(t.pos.x - ox, aimY - oy, t.pos.z - oz).normalize();
       const ex = (Math.random() - 0.5) * 2 * err, ey = (Math.random() - 0.5) * 2 * err;
       const dir = new THREE.Vector3(v1.x + ex * v1.z, v1.y + ey, v1.z - ex * v1.x).normalize();
       const mz = new THREE.Vector3(); this.guns[this.wpn].muzzle.getWorldPosition(mz);
-      g.fireBullet(this, new THREE.Vector3(ox, oy, oz), dir, def, mz, DIFF.dmg[g.diff]);
+      g.fireBullet(this, new THREE.Vector3(ox, oy, oz), dir, def, mz, DIFF.dmg[g.diff] * (this.dmgMul || 1));
       VG.FX.muzzle(mz.x, mz.y, mz.z, Math.random() < 0.5);
       A.shot(def.sound, false, ox, oz);
       this.mag--; this.burst--; this.lastFired = now;
@@ -361,7 +378,7 @@
       const local = Math.atan2(d.x, d.z) - this.yaw;
       m.rotation.set(Math.cos(local) * e * 1.5, this.yaw, -Math.sin(local) * e * 1.5, 'YXZ');
       m.position.y = this.pos.y + 0.05 - e * 0.05;
-      if (this.dieT > 2.2) { m.visible = false; this.respawnT = Math.max(this.respawnT, 0.6); }
+      if (this.dieT > 2.2 && !this.game.keepBodies) { m.visible = false; this.respawnT = Math.max(this.respawnT, 0.6); }
     }
   }
   VG.Bot = Bot;
@@ -424,7 +441,7 @@
       const d = this.fallDir || { x: 0, z: 1 };
       const local = Math.atan2(d.x, d.z) - this.yaw;
       m.rotation.set(Math.cos(local) * e * 1.5, this.yaw, -Math.sin(local) * e * 1.5, 'YXZ');
-      if (this.dieT > 2.2) m.visible = false;
+      if (this.dieT > 2.2 && !this.game.keepBodies) m.visible = false;
     }
     die(dir) { this.alive = false; this.dieT = 0; this.vel.set(0, 0, 0); this.fallDir = dir; this.respawnT = 3.5; }
     think() {} hear() {} damaged() {}

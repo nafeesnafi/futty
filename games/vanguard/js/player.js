@@ -112,7 +112,7 @@
         if (hs > 0.01) { this.vel.x *= sp / hs; this.vel.z *= sp / hs; }
         if (this.slideT <= 0 || sp < 2.6 || !this.onGround && this.slideT < 0.6) { this.sliding = false; this.crouch = true; }
       } else {
-        let speed = this.sprint ? 7.0 : 4.6;
+        let speed = (this.sprint ? 7.0 : 4.6) * (this.game.speedMul || 1);
         if (crouched) speed = 2.4;
         if (this.ads > 0.3) speed = Math.min(speed, d.id === 'sniper' ? 1.9 : 2.8);
         const k = this.onGround ? 13 : 2.2;
@@ -180,6 +180,14 @@
         swY = (Math.cos(t * 0.8) * 0.0045 + Math.sin(t * 1.9) * 0.0015) * k;
       } else { this.breath = Math.min(4, this.breath + dt); }
       this.scopedNow = scoped; this.holdingBreath = scoped && inp.down.ShiftLeft && !this.breathOut;
+      // shaking hands (campaign trauma): small, irregular aim tremor
+      const tr = this.tremor || 0;
+      if (tr > 0) {
+        this.trT = (this.trT || 0) + dt;
+        const t2 = this.trT;
+        swP += (Math.sin(t2 * 21) * 0.6 + Math.sin(t2 * 34.3) * 0.4 + (Math.random() - 0.5) * 0.5) * tr * 0.012;
+        swY += (Math.sin(t2 * 17.4) * 0.6 + Math.sin(t2 * 29.1) * 0.4 + (Math.random() - 0.5) * 0.5) * tr * 0.012;
+      }
 
       // ---------- weapon switching ----------
       if (this.nextWpn) {
@@ -300,7 +308,7 @@
       VG.FX.playerFlash(mw.x, mw.y, mw.z);
       if (!scoped) { vm.flash.visible = true; vm.flash.material.rotation = Math.random() * 6.28; this.flashT = 0.04; }
       const adsK = this.ads > 0.5 ? 0.7 : 1, crK = crouched ? 0.85 : 1;
-      this.recTP += d.recoilP * D2R * adsK * crK * (0.85 + Math.random() * 0.3);
+      this.recTP += d.recoilP * D2R * adsK * crK * (0.85 + Math.random() * 0.3) * (g.recoilMul || 1);
       this.recTY += (Math.random() - 0.42) * 2 * d.recoilY * D2R * adsK;
       this.kick = Math.min(1, this.kick + (d.id === 'sniper' ? 1 : 0.35));
       if (d.id === 'sniper') VG.FX.shake = Math.max(VG.FX.shake, 0.3);
