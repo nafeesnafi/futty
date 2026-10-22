@@ -230,6 +230,12 @@
         .movers(3, 'side', 3, 0.8, 2.5).check()
         .go(2.5, 0.6).movers(2, 'side', 3.5, 0.9, 2.5, 3).finish(),
     },
+    {
+      name: 'Crumble Path', sky: 0xe8d3b0, tip: 'Brown platforms fall away shortly after you land. Keep moving!',
+      plats: course().go(2.5).crumbles(3, 2.2, 0, 3).check()
+        .crumbles(4, 2.4, 0.3, 2.8).check()
+        .go(2.5, 0.5).crumbles(5, 2.5, 0, 2.6).finish(),
+    },
   ];
 
   // ---------- storage ----------

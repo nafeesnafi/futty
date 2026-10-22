@@ -55,6 +55,7 @@ level as fast as you can:
 3. **Sky Tower**: a spiral climb with crumbling platforms
 4. **Stepping Stones**: easy hops and gentle steps to get your legs going
 5. **Lazy River**: slow drifting platforms. Wait for them to come to you
+6. **Crumble Path**: brown platforms fall away shortly after you land. Keep moving
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 
