@@ -98,25 +98,62 @@
         <select id="optGfx"><option value="2">High</option><option value="1" selected>Medium</option><option value="0">Low</option></select>
       </label>
     </div>
-    <button id="playBtn" class="btn">DEPLOY</button>
+    <button id="playBtn" class="btn">DEPLOY VS BOTS</button>
+    <button id="onlineBtn" class="btn ghost">PLAY ONLINE · 1V1 / 2V2 / 4V4</button>
+    <button id="keysBtn" class="btn ghost">CONTROLS</button>
     <div id="record"></div>
     <details class="controls">
       <summary>Controls</summary>
-      <table>
-        <tr><td>Move / sprint</td><td>WASD / Shift</td></tr>
-        <tr><td>Crouch (slide while sprinting)</td><td>C to toggle, or hold Ctrl</td></tr>
-        <tr><td>Jump · climb ladders</td><td>Space · W at a ladder</td></tr>
-        <tr><td>Fire / aim down sights</td><td>Left / right mouse</td></tr>
-        <tr><td>Reload</td><td>R</td></tr>
-        <tr><td>Weapons</td><td>1 2 3 or mouse wheel</td></tr>
-        <tr><td>Killstreaks (UAV / airstrike)</td><td>4 / 5</td></tr>
-        <tr><td>Hold breath (scoped)</td><td>Shift</td></tr>
-        <tr><td>Scoreboard · FPS counter</td><td>Tab · F</td></tr>
-        <tr><td>Pause</td><td>Esc</td></tr>
-      </table>
+      <table><tbody id="helpRows"></tbody></table>
       <p class="note">Ctrl+W closes the tab in most browsers, so C is the safer crouch key.</p>
     </details>
     <p class="note mobile">Touch controls: left thumb moves (push to the edge to sprint), drag the right side to look, hold FIRE (drag it to aim while shooting). Play with the phone sideways.</p>
+  </div>
+</div>
+
+<div id="online" class="screen hidden">
+  <div class="menuBox glass">
+    <div class="logo small">PLAY ONLINE</div>
+    <div class="tagline">Team deathmatch with friends · bots fill empty slots</div>
+    <div id="onHome">
+      <label class="field">Your callsign <input id="onName" maxlength="12" placeholder="Player" autocomplete="off"></label>
+      <div class="onRow">
+        <select id="onSize" aria-label="Format"><option value="1">1v1</option><option value="2" selected>2v2</option><option value="4">4v4</option></select>
+        <button id="onCreate" class="btn">CREATE LOBBY</button>
+      </div>
+      <div class="onOr">or join a friend</div>
+      <div class="onRow">
+        <input id="onCode" maxlength="6" placeholder="CODE" autocomplete="off" autocapitalize="characters" aria-label="Lobby code">
+        <button id="onJoin" class="btn ghost">JOIN</button>
+      </div>
+    </div>
+    <div id="onLobby" class="hidden">
+      <div class="codeBox"><span>LOBBY CODE</span><b id="onCodeShow"></b><button id="onCopy" class="btn ghost">COPY INVITE LINK</button></div>
+      <div id="onFormat" class="tagline"></div>
+      <div class="teams">
+        <div><h4 class="ta">TEAM A</h4><ul id="onTeam0"></ul></div>
+        <div><h4 class="tb2">TEAM B</h4><ul id="onTeam1"></ul></div>
+      </div>
+      <div class="onRow" id="onSizeRow">
+        <select id="onSize2" aria-label="Format"><option value="1">1v1</option><option value="2">2v2</option><option value="4">4v4</option></select>
+      </div>
+      <button id="onSwitch" class="btn ghost">SWITCH TEAM</button>
+      <button id="onStart" class="btn">START MATCH</button>
+      <div id="onWait" class="note">Waiting for the host to start the match…</div>
+    </div>
+    <div id="onStatus" class="note"></div>
+    <div id="onError" class="note err"></div>
+    <button id="onBack" class="btn ghost">BACK</button>
+  </div>
+</div>
+
+<div id="keys" class="screen hidden">
+  <div class="menuBox glass">
+    <div class="logo small">CONTROLS</div>
+    <div class="tagline">Click an action, then press a key or mouse button · Esc cancels</div>
+    <table class="keysTable"><tbody id="keysBody"></tbody></table>
+    <button id="keysReset" class="btn ghost">RESET TO DEFAULTS</button>
+    <button id="keysBack" class="btn">DONE</button>
   </div>
 </div>
 
@@ -141,6 +178,7 @@
 <div id="loading" class="screen hidden"><div class="logo small">BUILDING COMPOUND…</div></div>
 
 <script src="../shared/lib/three.min.js"></script>
+<script src="../shared/lib/peerjs.min.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/physics.js"></script>
 <script src="js/textures.js"></script>
@@ -153,5 +191,6 @@
 <script src="js/hud.js"></script>
 <script src="js/game.js"></script>
 <script src="js/touch.js"></script>
+<script src="js/net.js"></script>
 </body>
 </html>

@@ -74,27 +74,103 @@
   // phones / tablets: no pointer lock, touch overlay (touch.js) drives the same input object
   G.touch = matchMedia('(pointer: coarse)').matches || ('ontouchstart' in window && !matchMedia('(pointer: fine)').matches);
   if (G.touch) { G.noLock = true; if (store.get('fsg.vanguard.settings', null) === null) G.settings.gfx = 0; }
+
+  // ---------- key bindings ----------
+  // The game logic reads the default codes (KeyW, Mouse0...). A rebound key is translated to the default code
+  // of its action, and a default key whose action moved elsewhere is ignored.
+  const ACTIONS = [
+    ['forward', 'Move forward', 'KeyW'], ['back', 'Move back', 'KeyS'], ['left', 'Move left', 'KeyA'], ['right', 'Move right', 'KeyD'],
+    ['sprint', 'Sprint · hold breath', 'ShiftLeft'], ['crouch', 'Crouch / slide (toggle)', 'KeyC'], ['crouchHold', 'Crouch (hold)', 'ControlLeft'],
+    ['jump', 'Jump · climb', 'Space'], ['fire', 'Fire', 'Mouse0'], ['ads', 'Aim down sights', 'Mouse2'], ['reload', 'Reload', 'KeyR'],
+    ['w1', 'Assault rifle', 'Digit1'], ['w2', 'SMG', 'Digit2'], ['w3', 'Sniper rifle', 'Digit3'],
+    ['uav', 'UAV', 'Digit4'], ['air', 'Airstrike', 'Digit5'], ['board', 'Scoreboard (hold)', 'Tab'], ['fps', 'FPS counter', 'KeyF'],
+  ];
+  const DEF = {}; for (const [a, , c] of ACTIONS) DEF[a] = c;
+  const DEFAULT_CODES = new Set(Object.values(DEF));
+  G.binds = Object.assign({}, DEF, store.get('fsg.vanguard.keys', {}));
+  let codeToCanon = new Map();
+  function rebuildBinds() {
+    codeToCanon = new Map();
+    for (const a in G.binds) codeToCanon.set(G.binds[a], DEF[a]);
+    store.set('fsg.vanguard.keys', G.binds);
+  }
+  rebuildBinds();
+  const canonOf = (code) => (codeToCanon.has(code) ? codeToCanon.get(code) : DEFAULT_CODES.has(code) ? null : code);
+  G.keyName = function (code) {
+    if (!code) return '—';
+    const m = { Mouse0: 'Left mouse', Mouse1: 'Middle mouse', Mouse2: 'Right mouse', Mouse3: 'Mouse 4', Mouse4: 'Mouse 5', ShiftLeft: 'L-Shift', ShiftRight: 'R-Shift',
+      ControlLeft: 'L-Ctrl', ControlRight: 'R-Ctrl', AltLeft: 'L-Alt', AltRight: 'R-Alt', Space: 'Space', Tab: 'Tab', CapsLock: 'Caps', Backquote: '`',
+      ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Enter: 'Enter', Backspace: 'Backspace' };
+    if (m[code]) return m[code];
+    return code.replace(/^Key/, '').replace(/^Digit/, '').replace(/^Numpad/, 'Num ');
+  };
+  G.keyLabel = (action) => G.keyName(G.binds[action]).toUpperCase();
+  function press(c, down) {
+    if (!c) return;
+    if (c.startsWith('Mouse')) { input.mouse[+c[5]] = down; return; }
+    if (down) {
+      if (!input.down[c]) input.pressed[c] = true;
+      input.down[c] = true;
+      if (c === 'Tab') HUD.showBoard(true);
+      if (c === 'KeyF') G.showFps = !G.showFps;
+    } else {
+      input.down[c] = false;
+      if (c === 'Tab' && G.running) HUD.showBoard(false);
+    }
+  }
+  let capture = null; // action waiting for a new key on the controls screen
+  function bindTo(action, code) {
+    if (typeof action === 'object') action = action.action;
+    const prev = G.binds[action];
+    for (const a in G.binds) if (a !== action && G.binds[a] === code) G.binds[a] = prev; // swap on conflict
+    G.binds[action] = code; capture = null; rebuildBinds(); renderKeys();
+  }
   addEventListener('keydown', (e) => {
+    if (capture) { e.preventDefault(); if (e.code === 'Escape') { capture = null; renderKeys(); } else bindTo(capture, e.code); return; }
     if (!G.running) return;
-    if (['Tab', 'Space', 'ControlLeft', 'KeyW'].includes(e.code) || e.ctrlKey) e.preventDefault();
-    if (!input.down[e.code]) input.pressed[e.code] = true;
-    input.down[e.code] = true;
-    if (e.code === 'Tab') HUD.showBoard(true);
-    if (e.code === 'KeyF') G.showFps = !G.showFps;
+    const c = canonOf(e.code);
+    if (['Tab', 'Space', 'ControlLeft', 'KeyW'].includes(c) || e.code === 'Tab' || e.code === 'Space' || e.ctrlKey || e.altKey) e.preventDefault();
+    press(c, true);
   });
-  addEventListener('keyup', (e) => {
-    input.down[e.code] = false;
-    if (e.code === 'Tab' && G.running) HUD.showBoard(false);
-  });
+  addEventListener('keyup', (e) => { press(canonOf(e.code), false); });
   addEventListener('blur', () => { input.down = {}; input.mouse = [false, false, false]; });
+  addEventListener('mousedown', (e) => {
+    if (capture && capture.armed) { e.preventDefault(); bindTo(capture.action, 'Mouse' + e.button); }
+  }, true);
   canvas.addEventListener('mousedown', (e) => {
     if (!G.running || G.ended) return;
     A.init();
     if (!locked() && !G.noLock) { requestLock(); return; }
-    input.mouse[e.button] = true;
+    press(canonOf('Mouse' + e.button), true);
     if (G.player && !G.player.alive && G.respawnT <= 0) G.respawnPlayer();
   });
-  addEventListener('mouseup', (e) => { input.mouse[e.button] = false; });
+  addEventListener('mouseup', (e) => { press(canonOf('Mouse' + e.button), false); });
+  canvas.addEventListener('auxclick', (e) => e.preventDefault());
+
+  function renderKeys() {
+    const body = $('keysBody'); if (!body) return;
+    body.innerHTML = ACTIONS.map(([a, label]) => {
+      const waiting = capture && capture.action === a;
+      return `<tr><td>${label}</td><td><button class="keyBtn${waiting ? ' wait' : ''}" data-a="${a}">${waiting ? 'Press a key or button…' : G.keyName(G.binds[a])}</button></td></tr>`;
+    }).join('');
+    // help table on the main menu mirrors the bindings
+    const k = G.keyLabel;
+    $('helpRows').innerHTML = [
+      ['Move / sprint', `${k('forward')} ${k('left')} ${k('back')} ${k('right')} / ${k('sprint')}`],
+      ['Crouch (slide while sprinting)', `${k('crouch')} toggle, or hold ${k('crouchHold')}`],
+      ['Jump · climb ladders', `${k('jump')} · ${k('forward')} at a ladder`],
+      ['Fire / aim down sights', `${k('fire')} / ${k('ads')}`], ['Reload', k('reload')],
+      ['Weapons', `${k('w1')} ${k('w2')} ${k('w3')} or mouse wheel`], ['Killstreaks (UAV / airstrike)', `${k('uav')} / ${k('air')}`],
+      ['Hold breath (scoped)', k('sprint')], ['Scoreboard · FPS counter', `${k('board')} · ${k('fps')}`], ['Pause', 'ESC'],
+    ].map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
+  }
+  G.renderKeys = renderKeys;
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest && e.target.closest('.keyBtn'); if (!b) return;
+    capture = { action: b.dataset.a, armed: false };
+    renderKeys();
+    setTimeout(() => { if (capture) capture.armed = true; }, 200); // don't bind the click that opened it
+  });
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   addEventListener('wheel', (e) => { if (G.running) input.wheel += Math.sign(e.deltaY); }, { passive: true });
   addEventListener('mousemove', (e) => {
@@ -115,7 +191,11 @@
     if (locked()) setPaused(false);
     else if (!G.noLock) setPaused(true);
   });
-  document.addEventListener('pointerlockerror', () => { G.noLock = true; setPaused(false); });
+  document.addEventListener('pointerlockerror', () => {
+    // online matches start from a network message (no click), so ask for a click instead of giving up on the lock
+    if (G.online && !G.touch) { setPaused(true); return; }
+    G.noLock = true; setPaused(false);
+  });
   G.setPaused = (p) => setPaused(p);
   function setPaused(p) {
     G.paused = p;
@@ -137,7 +217,7 @@
   };
 
   // ---------- bullets ----------
-  G.fireBullet = function (shooter, o, dir, def, tracerFrom, dmgMult) {
+  G.fireBullet = function (shooter, o, dir, def, tracerFrom, dmgMult, noTracer) {
     const maxD = 260;
     let mult = dmgMult || 1;
     let bestA = null, bestT = maxD, zone = null;
@@ -172,26 +252,47 @@
       FX.blood(hx, hy, hz, dir.x, dir.y, dir.z, zone === 'head');
       G.damage(bestA, dmg, shooter, def, zone === 'head', dir, endT);
     }
-    if (tracerFrom) FX.tracer(tracerFrom.x, tracerFrom.y, tracerFrom.z, o.x + dir.x * endT, o.y + dir.y * endT, o.z + dir.z * endT);
-    // supersonic crack when a bullet flies past your head
+    const ex = o.x + dir.x * endT, ey = o.y + dir.y * endT, ez = o.z + dir.z * endT;
+    if (tracerFrom && !noTracer) FX.tracer(tracerFrom.x, tracerFrom.y, tracerFrom.z, ex, ey, ez);
+    // online: everyone else draws the tracer and hears the shot (bots' shots come from the host)
+    if (G.net && (shooter.isPlayer || (G.net.isHost() && !(shooter instanceof VG.Remote)))) {
+      const f = tracerFrom || o;
+      G.net.shot(shooter.id, [f.x, f.y, f.z], [ex, ey, ez], def.id);
+    }
+    if (!shooter.isPlayer && bestA !== G.player) G.bulletPast([o.x, o.y, o.z], [ex, ey, ez]);
+  };
+
+  // supersonic crack when a bullet flies past your head
+  G.bulletPast = function (f, e) {
     const p = G.player;
-    if (!shooter.isPlayer && p.alive && bestA !== p) {
-      v1.set(p.pos.x - o.x, p.pos.y + p.eye - o.y, p.pos.z - o.z);
-      const t = v1.dot(dir);
-      if (t > 0 && t < endT) {
-        const miss = v1.addScaledVector(dir, -t).length();
-        if (miss < 1.6) {
-          const rx = Math.cos(p.yaw), rz = -Math.sin(p.yaw);
-          A.whiz(Math.max(-1, Math.min(1, -(v1.x * rx + v1.z * rz))));
-        }
-      }
+    if (!p || !p.alive) return;
+    const dx = e[0] - f[0], dy = e[1] - f[1], dz = e[2] - f[2], len = Math.hypot(dx, dy, dz);
+    if (len < 1) return;
+    const d = { x: dx / len, y: dy / len, z: dz / len };
+    v1.set(p.pos.x - f[0], p.pos.y + p.eye - f[1], p.pos.z - f[2]);
+    const t = v1.x * d.x + v1.y * d.y + v1.z * d.z;
+    if (t <= 0 || t >= len) return;
+    v1.x -= d.x * t; v1.y -= d.y * t; v1.z -= d.z * t;
+    if (v1.length() < 1.6) {
+      const rx = Math.cos(p.yaw), rz = -Math.sin(p.yaw);
+      A.whiz(Math.max(-1, Math.min(1, -(v1.x * rx + v1.z * rz))));
     }
   };
 
   // ---------- damage, kills, scoring ----------
   G.damage = function (victim, amount, attacker, def, head, dir, dist) {
     if (!victim.alive || G.ended) return;
+    if (G.net && !G.net.isHost()) {
+      // guest: report our own hits; the host owns everyone's health
+      if (attacker && attacker.isPlayer && victim !== attacker) {
+        G.net.hit(victim.id, amount, head, def.id, dir.x, dir.z, dist);
+        HUD.hitmarker(head ? 'head' : 'hit');
+        if (head) A.headshot(); else A.hitmarker();
+      }
+      return;
+    }
     victim.health -= amount; victim.lastHit = G.now;
+    if (G.net && victim.human) G.net.dmgTo(victim.id, amount, attacker && attacker.id);
     const lethal = victim.health <= 0;
     if (attacker && attacker.isPlayer && victim !== attacker) {
       HUD.hitmarker(lethal ? 'kill' : head ? 'head' : 'hit');
@@ -206,7 +307,21 @@
     else if (!victim.isPlayer) victim.damaged(attacker, G.now);
   };
 
+  // guest: the host told us we were hit
+  G.localHurt = function (amount, attacker) {
+    const p = G.player; if (!p.alive) return;
+    p.health = Math.max(1, p.health - amount); p.lastHit = G.now;
+    A.hurt(); FX.shake = Math.max(FX.shake, 0.25);
+    if (attacker) HUD.damage(attacker.pos.x, attacker.pos.z);
+  };
+
   G.kill = function (victim, attacker, def, head, dir, dist) {
+    G.applyKill(victim, attacker, def, head, dir, dist);
+    if (G.net) G.net.kill(victim.id, attacker ? attacker.id : null, def ? def.id : 'ar', head, dir, dist);
+    checkWin();
+  };
+  G.applyKill = function (victim, attacker, def, head, dir, dist) {
+    if (!victim.alive && victim.health === 0) return;
     victim.health = 0; victim.alive = false; victim.deaths++;
     victim.streak = 0;
     const p = G.player;
@@ -220,10 +335,11 @@
       if (attacker.isPlayer) playerKill(victim, def, head, dist);
       if (victim.isPlayer) p.nemesis = attacker;
     } else if (G.mode === 'tdm') { /* suicides don't change team score */ }
+    if (credited && attacker.isPlayer && G.net && !G.net.isHost()) { HUD.hitmarker('kill'); }
     G.firstBlood = G.firstBlood || credited;
     HUD.killfeed(credited ? attacker : null, victim, def, head);
-    checkWin();
   };
+  G.AIRSTRIKE = AIRSTRIKE;
 
   function playerKill(victim, def, head, dist) {
     const p = G.player, now = G.now;
@@ -246,8 +362,8 @@
     else if (p.multi >= 4) { medal('FURY KILL', 100); HUD.banner('FURY KILL', '+100'); A.announce('Fury kill'); }
     else if (head) HUD.banner('HEADSHOT', '+25');
     // killstreaks
-    if (p.streak === 3 && !G.uavEarned) { G.uavEarned = true; G.uavReady = true; HUD.banner('UAV READY', G.touch ? 'TAP UAV' : 'PRESS [4]'); A.announce('U A V ready'); }
-    if (p.streak === 5 && !G.airEarned) { G.airEarned = true; G.airReady = true; HUD.banner('AIRSTRIKE READY', G.touch ? 'TAP AIRSTRIKE' : 'PRESS [5]'); A.announce('Airstrike ready'); }
+    if (p.streak === 3 && !G.uavEarned) { G.uavEarned = true; G.uavReady = true; HUD.banner('UAV READY', G.touch ? 'TAP UAV' : `PRESS [${G.keyLabel('uav')}]`); A.announce('U A V ready'); }
+    if (p.streak === 5 && !G.airEarned) { G.airEarned = true; G.airReady = true; HUD.banner('AIRSTRIKE READY', G.touch ? 'TAP AIRSTRIKE' : `PRESS [${G.keyLabel('air')}]`); A.announce('Airstrike ready'); }
   }
 
   function playerDied(killer) {
@@ -260,17 +376,29 @@
     G.vmRoot.visible = false;
   }
 
-  G.respawnPlayer = function () {
+  G.respawnPlayer = function (sx, sz, syaw) {
     const p = G.player;
-    const [x, z, yaw] = pickSpawn(p);
+    if (sx === undefined && G.net && !G.net.isHost()) return; // guests wait for the host to place them
+    const [x, z, yaw] = sx === undefined ? pickSpawn(p) : [sx, sz, syaw];
     p.reset(); p.pos.set(x, 0, z); p.yaw = yaw; p.pitch = 0;
     HUD.setDeath(false); G.deathCam = null;
+  };
+  // host: a player left mid-match, a bot takes over their soldier (same id, so everyone keeps their puppet)
+  G.replaceWithBot = function (id) {
+    const old = G.byId.get(id); if (!old || old.isPlayer) return;
+    const b = new VG.Bot(G, old.name, old.team, G.actors.indexOf(old));
+    b.id = id; b.kills = old.kills; b.deaths = old.deaths; b.score = old.score;
+    G.scene.remove(old.model);
+    G.remotes = G.remotes.filter(r => r !== old); G.bots.push(b);
+    G.actors[G.actors.indexOf(old)] = b; G.byId.set(id, b);
+    G.respawn(b);
   };
   G.respawn = function (bot) {
     const [x, z, yaw] = pickSpawn(bot);
     bot.spawn(x, z, yaw);
   };
 
+  G.pickSpawn = (a) => pickSpawn(a);
   function pickSpawn(actor) {
     let best = null, bs = -1e9;
     for (const [x, z] of G.spawns) {
@@ -311,13 +439,21 @@
     const x = c.x + d.x * t, z = c.z + d.z * t;
     const hl = Math.hypot(d.x, d.z) || 1;
     G.airReady = false;
-    G.airPending = { x, z, dx: d.x / hl, dz: d.z / hl, t: 3.2, jet: false, bombs: [] };
+    if (G.net && !G.net.isHost()) { G.net.air(x, z, d.x / hl, d.z / hl); G.airMark = { x, z, t: 4 }; }
+    else G.startAirstrike(G.player, x, z, d.x / hl, d.z / hl);
     HUD.banner('AIRSTRIKE INBOUND', 'MARKED ON RADAR'); A.announce('Airstrike inbound');
   }
+  G.startAirstrike = function (owner, x, z, dx, dz) {
+    G.airs.push({ owner, x, z, dx, dz, t: 3.2, jet: false, bombs: [] });
+  };
   function updateAirstrike(dt) {
-    const a = G.airPending; if (!a) return;
+    if (G.airMark) { G.airMark.t -= dt; if (G.airMark.t <= 0) G.airMark = null; }
+    G.airPending = G.airs.find(a => a.owner === G.player) || G.airMark;
+    for (const a of G.airs.slice()) stepAirstrike(a, dt);
+  }
+  function stepAirstrike(a, dt) {
     a.t -= dt;
-    if (!a.jet && a.t < 1.8) { a.jet = true; A.jet(); }
+    if (!a.jet && a.t < 1.8) { a.jet = true; A.jet(); if (G.net) G.net.jet(); }
     if (a.t <= 0 && !a.bombs.length && !a.done) {
       a.done = true;
       for (let i = 0; i < 5; i++) a.bombs.push({ t: i * 0.14, off: (i - 2) * 5 });
@@ -325,17 +461,21 @@
     for (const b of a.bombs) {
       if (b.fired) continue;
       b.t -= dt;
-      if (b.t <= 0) { b.fired = true; explode(a.x + a.dx * b.off + (Math.random() - 0.5) * 2, a.z + a.dz * b.off + (Math.random() - 0.5) * 2); }
+      if (b.t <= 0) { b.fired = true; explode(a.x + a.dx * b.off + (Math.random() - 0.5) * 2, a.z + a.dz * b.off + (Math.random() - 0.5) * 2, a.owner); }
     }
-    if (a.done && a.bombs.every(b => b.fired)) G.airPending = null;
+    if (a.done && a.bombs.every(b => b.fired)) G.airs.splice(G.airs.indexOf(a), 1);
   }
-  function explode(x, z) {
+  G.explosionFx = function (x, y, z) {
+    FX.explosion(x, y, z); A.explosion(x, z);
+    const p = G.player, pd = Math.hypot(p.pos.x - x, p.pos.z - z);
+    FX.shake = Math.max(FX.shake, Math.max(0, 1.2 - pd / 40));
+  };
+  function explode(x, z, owner) {
     let y = 0;
     const h = P.raycast(x, 30, z, 0, -1, 0, 40); if (h) y = 30 - h.t;
-    FX.explosion(x, y, z); A.explosion(x, z);
-    const p = G.player;
-    const pd = Math.hypot(p.pos.x - x, p.pos.z - z);
-    FX.shake = Math.max(FX.shake, Math.max(0, 1.2 - pd / 40));
+    G.explosionFx(x, y, z);
+    if (G.net) G.net.boom(x, y, z);
+    const p = owner;
     for (const e of G.actors) {
       if (!e.alive || !G.hostile(p, e)) continue;
       const d = Math.hypot(e.pos.x - x, e.pos.y - y, e.pos.z - z);
@@ -348,48 +488,78 @@
   }
 
   // ---------- match flow ----------
-  function startMatch() {
+  // online = { roster: [{id, name, team, kind, idx}], me, goal, diff, role } from net.js, or undefined offline
+  G.startMatch = (o) => startMatch(o);
+  function startMatch(online) {
     const s = G.settings;
-    G.mode = s.mode; G.diff = +s.diff;
+    if (!online && VG.Net && VG.Net.role) VG.Net.leave();
+    if (!online) G.net = null;
+    G.online = online || null;
+    G.mode = online ? 'tdm' : s.mode; G.diff = online ? +online.diff : +s.diff;
+    G.killGoal = online ? online.goal : 30;
     $('loading').classList.remove('hidden');
     // let the loading screen paint before the (synchronous) world build
     setTimeout(() => {
       if (!G.built) buildWorld();
       setupRenderer();
-      if (G.bots) for (const b of G.bots) G.scene.remove(b.model);
+      if (G.actors) for (const b of G.actors) if (b.model) G.scene.remove(b.model);
       if (!G.player) G.player = new VG.Player(G);
       const p = G.player;
       p.kills = p.deaths = p.score = p.headshots = p.shots = p.hits = p.bestStreak = 0; p.nemesis = null; p.cur = 'ar';
-      p.team = 0;
-      const n = +s.bots;
-      const allies = G.mode === 'tdm' ? Math.floor((n + 1) / 2) - 1 : 0;
-      const names = VG.CALLSIGNS.slice().sort(() => Math.random() - 0.5);
-      G.bots = [];
-      for (let i = 0; i < n; i++) {
-        const team = G.mode === 'tdm' ? (i < allies ? 0 : 1) : i + 1;
-        G.bots.push(new VG.Bot(G, names[i], team, i));
+      p.team = 0; p.id = 'me'; p.name = 'You';
+      G.bots = []; G.remotes = [];
+      if (online) {
+        const mine = online.roster.find(r => r.id === online.me);
+        p.id = mine.id; p.team = mine.team; p.name = mine.name;
+        for (const r of online.roster) {
+          if (r.id === online.me) continue;
+          if (online.role === 'host' && r.kind === 'bot') { const b = new VG.Bot(G, r.name, r.team, r.idx); b.id = r.id; G.bots.push(b); }
+          else G.remotes.push(new VG.Remote(G, r.name, r.team, r.idx, r.id, r.kind === 'human'));
+        }
+      } else {
+        const n = +s.bots;
+        const allies = G.mode === 'tdm' ? Math.floor((n + 1) / 2) - 1 : 0;
+        const names = VG.CALLSIGNS.slice().sort(() => Math.random() - 0.5);
+        for (let i = 0; i < n; i++) {
+          const team = G.mode === 'tdm' ? (i < allies ? 0 : 1) : i + 1;
+          const b = new VG.Bot(G, names[i], team, i); b.id = 'b' + i;
+          G.bots.push(b);
+        }
       }
-      G.actors = [p, ...G.bots];
-      for (const a of G.actors) a.alive = false;
+      G.actors = [p, ...G.bots, ...G.remotes];
+      G.byId = new Map(G.actors.map(a => [a.id, a]));
+      G.airs = []; G.airMark = null;
+      for (const a of G.actors) { a.alive = false; a.health = 0; }
       G.teamKills = [0, 0]; G.timeLeft = 600; G.now = 0; G.timeScale = 1;
       G.uavReady = G.airReady = G.uavEarned = G.airEarned = false; G.uavT = 0; G.uavSnap = new Map(); G.airPending = null;
       G.firstBlood = false; G.ended = false; G.deathCam = null; G.respawnT = 0;
       HUD.init(G);
-      G.respawnPlayer();
-      for (const b of G.bots) G.respawn(b);
       HUD.setDeath(false); HUD.showBoard(false);
+      if (online && online.role === 'guest') {
+        // wait for the host to place us; look over the map meanwhile
+        p.alive = false; G.respawnT = 0;
+        G.camera.position.set(0, 34, 62); G.camera.lookAt(0, 0, 0);
+        HUD.setDeath(true, null, 'DEPLOYING');
+      } else {
+        G.respawnPlayer();
+        for (const b of G.bots) G.respawn(b);
+      }
       $('loading').classList.add('hidden'); $('menu').classList.add('hidden'); $('end').classList.add('hidden');
       $('hud').classList.remove('hidden');
       G.running = true;
       setPaused(false);
       if (!G.touch) requestLock();
       if (G.onMatchStart) G.onMatchStart();
-      HUD.banner(G.mode === 'tdm' ? 'TEAM DEATHMATCH' : 'FREE-FOR-ALL', `FIRST TO ${G.killGoal} KILLS`);
+      HUD.banner(online ? `ONLINE ${online.roster.length / 2}V${online.roster.length / 2}` : G.mode === 'tdm' ? 'TEAM DEATHMATCH' : 'FREE-FOR-ALL', `FIRST TO ${G.killGoal} KILLS`);
       A.announce(G.mode === 'tdm' ? 'Team deathmatch. Engage.' : 'Free for all. Engage.');
+      if (G.net) G.net.ready();
     }, 30);
   }
 
+  G.endMatch = () => endMatch();
   function endMatch() {
+    if (G.ended) return;
+    if (G.net && G.net.isHost()) G.net.end();
     G.ended = true; G.endT = 0; G.timeScale = 0.25;
     const p = G.player;
     let win;
@@ -418,9 +588,14 @@
     const stats = [['KILLS', p.kills], ['DEATHS', p.deaths], ['K/D', (p.kills / Math.max(1, p.deaths)).toFixed(2)],
       ['SCORE', p.score], ['ACCURACY', acc + '%'], ['HEADSHOTS', p.headshots], ['BEST STREAK', p.bestStreak]];
     $('endStats').innerHTML = stats.map(([k, v]) => `<div><b>${v}</b><span>${k}</span></div>`).join('');
+    $('againBtn').textContent = G.online ? 'BACK TO LOBBY' : 'PLAY AGAIN';
+    $('menuBtn').textContent = G.online ? 'LEAVE ONLINE' : 'MAIN MENU';
   }
 
-  function quitToMenu() {
+  G.quitToMenu = (fromNet) => quitToMenu(fromNet);
+  function quitToMenu(fromNet) {
+    if (!fromNet && VG.Net && VG.Net.role) VG.Net.leave();
+    G.net = null; G.online = null;
     G.running = false; G.paused = false;
     if (document.exitPointerLock) document.exitPointerLock();
     ['hud', 'pause', 'end'].forEach(id => $(id).classList.add('hidden'));
@@ -435,12 +610,12 @@
     const real = Math.min(0.05, (t - lastT) / 1000); lastT = t;
     if (real > 0) G.fps += (1 / real - G.fps) * 0.05;
     if (!G.running || !renderer) { input.pressed = {}; return; }
-    if (!G.paused) {
+    if (!G.paused || G.net) {
       if (G.ended) { G.endT += real; G.timeScale = G.endT < 2.4 ? 0.25 : 1; if (G.endT > 3.2) { showEnd(); return; } }
       const dt = real * G.timeScale;
       G.now += dt;
       if (!G.ended) G.timeLeft -= dt;
-      if (G.timeLeft <= 0 && !G.ended) endMatch();
+      if (G.timeLeft <= 0 && !G.ended && !(G.net && !G.net.isHost())) endMatch();
       step(dt, real);
     }
     renderer.autoClear = true;
@@ -456,11 +631,13 @@
     const p = G.player, now = G.now;
     if (input.pressed.Digit4) useUav();
     if (input.pressed.Digit5) useAirstrike();
-    if (p.alive) p.update(dt, G.ended ? { down: {}, pressed: {}, mouse: [false, false, false], wheel: 0 } : input, now);
+    if (p.alive) p.update(dt, G.ended || G.paused ? { down: {}, pressed: {}, mouse: [false, false, false], wheel: 0 } : input, now);
     else deathCam(dt);
     for (const b of G.bots) b.update(dt, now);
-    // regenerating health: 4 s without damage, then rapid recovery
-    for (const a of G.actors) if (a.alive && a.health < 100 && now - a.lastHit > 4) a.health = Math.min(100, a.health + 55 * dt);
+    for (const r of G.remotes) r.update(dt, now);
+    if (G.net) G.net.update(real);
+    // regenerating health: 4 s without damage, then rapid recovery (the host does it for everyone online)
+    if (!(G.net && !G.net.isHost())) for (const a of G.actors) if (a.alive && a.health < 100 && now - a.lastHit > 4) a.health = Math.min(100, a.health + 55 * dt);
     if (p.alive && p.health < 45) { heartT -= real; if (heartT <= 0) { heartT = 0.4 + p.health / 60; A.heartbeat(0.5 * (1 - p.health / 45) + 0.15); } }
     // UAV
     if (G.uavT > 0) {
@@ -474,8 +651,8 @@
       if (p.alive) {
         const c = G.camera.position, d = v1.set(0, 0, -1).applyQuaternion(G.camera.quaternion);
         let bt = 90;
-        for (const a of G.bots) {
-          if (!a.alive) continue;
+        for (const a of G.actors) {
+          if (!a.alive || a === p) continue;
           const r = P.rayActor(c.x, c.y, c.z, d.x, d.y, d.z, a, bt);
           if (r) { bt = r.t; G.aimTarget = a; }
         }
@@ -532,10 +709,22 @@
   }
   showRecord();
 
+  renderKeys();
+  $('keysBtn').addEventListener('click', () => {
+    A.init(); A.ui();
+    if (G.touch && VG.TouchLayout) { VG.TouchLayout.open(); return; }
+    $('menu').classList.add('hidden'); $('keys').classList.remove('hidden'); renderKeys();
+  });
+  $('keysBack').addEventListener('click', () => { A.ui(); capture = null; $('keys').classList.add('hidden'); $('menu').classList.remove('hidden'); });
+  $('keysReset').addEventListener('click', () => { A.ui(); G.binds = Object.assign({}, DEF); capture = null; rebuildBinds(); renderKeys(); });
   $('playBtn').addEventListener('click', () => { A.init(); A.ui(); startMatch(); });
   $('resumeBtn').addEventListener('click', () => { A.ui(); requestLock(); if (G.noLock) setPaused(false); });
   $('quitBtn').addEventListener('click', () => { A.ui(); quitToMenu(); });
-  $('againBtn').addEventListener('click', () => { A.ui(); startMatch(); });
+  $('againBtn').addEventListener('click', () => {
+    A.ui();
+    if (G.online && VG.Net && VG.Net.role) { quitToMenu(true); $('menu').classList.add('hidden'); VG.Net.toLobby(); }
+    else startMatch();
+  });
   $('menuBtn').addEventListener('click', () => { A.ui(); quitToMenu(); });
 
   requestAnimationFrame(frame);

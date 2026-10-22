@@ -306,3 +306,56 @@ body.touch .note.mobile { display: block; color: var(--accent); }
   #endStats { grid-template-columns: repeat(4, 1fr); }
   #endStats b { font-size: 20px; }
 }
+
+/* ---------- online lobby ---------- */
+.field { display: flex; flex-direction: column; gap: 4px; text-align: left; font-size: 13px; letter-spacing: 1.5px; color: var(--dim); font-weight: 600; text-transform: uppercase; margin-bottom: 12px; }
+.field input, .onRow input, .onRow select {
+  font: inherit; font-size: 18px; background: rgba(0,0,0,.45); color: var(--hud); border: 1px solid var(--line); padding: 8px 10px; text-transform: none; letter-spacing: 1px;
+}
+.onRow { display: flex; gap: 8px; align-items: stretch; margin-bottom: 8px; }
+.onRow .btn { margin-top: 0; flex: 1; }
+.onRow select { width: 96px; }
+#onCode { width: 140px; text-transform: uppercase; letter-spacing: 4px; text-align: center; font-weight: 700; }
+.onOr { color: var(--dim); font-size: 13px; letter-spacing: 2px; margin: 10px 0 8px; text-transform: uppercase; }
+.codeBox { display: flex; align-items: center; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 4px; }
+.codeBox span { color: var(--dim); letter-spacing: 2px; font-size: 13px; }
+.codeBox b { font-size: 34px; letter-spacing: 6px; color: var(--gold); }
+.codeBox .btn { width: auto; margin: 0; font-size: 14px; padding: 6px 12px; }
+.teams { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; text-align: left; margin-bottom: 12px; }
+.teams h4 { margin: 0 0 6px; letter-spacing: 3px; font-size: 14px; }
+.teams .ta { color: var(--ally); } .teams .tb2 { color: var(--enemy); }
+.teams ul { list-style: none; margin: 0; padding: 0; }
+.teams li { padding: 6px 10px; margin-bottom: 4px; background: rgba(0,0,0,.35); font-weight: 600; font-size: 17px; }
+.teams li.me { color: var(--gold); }
+.teams li.bot { color: var(--dim); font-style: italic; }
+.teams li i { font-style: normal; font-size: 11px; letter-spacing: 1px; color: var(--accent); margin-left: 6px; }
+.note.err { color: var(--enemy); }
+#onStart:disabled { opacity: .5; }
+
+/* ---------- key bindings ---------- */
+.keysTable { width: 100%; border-collapse: collapse; margin-bottom: 12px; text-align: left; font-size: 16px; }
+.keysTable td { padding: 3px 4px; border-bottom: 1px solid rgba(255,255,255,.06); }
+.keysTable td:last-child { text-align: right; width: 48%; }
+.keyBtn {
+  font: inherit; font-weight: 700; min-width: 150px; padding: 4px 10px; cursor: pointer;
+  background: rgba(0,0,0,.45); color: var(--accent); border: 1px solid var(--line);
+}
+.keyBtn:hover { border-color: var(--accent); }
+.keyBtn.wait { color: #0c0f0d; background: var(--gold); animation: ready .6s infinite alternate; }
+
+/* ---------- touch layout editor ---------- */
+#touch .tb { opacity: var(--tbOpacity, 1); }
+#tEdit { display: none; }
+#touch.editing { background: repeating-linear-gradient(0deg, transparent 0 39px, rgba(255,255,255,.05) 39px 40px), repeating-linear-gradient(90deg, transparent 0 39px, rgba(255,255,255,.05) 39px 40px), #141a17; z-index: 60; }
+#touch.editing .tzone { display: none; }
+#touch.editing .tb { display: flex; }
+#touch.editing .tb.sel { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(255,204,77,.45); }
+#touch.editing #tEdit {
+  display: flex; position: absolute; left: 50%; top: 8px; transform: translateX(-50%); gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center;
+  background: rgba(0,0,0,.6); border: 1px solid var(--line); padding: 8px 12px; max-width: min(620px, 70vw); font-size: 13px; color: var(--hud);
+}
+.tEdTitle { width: 100%; text-align: center; color: var(--dim); letter-spacing: 1px; }
+#tEdit label { display: flex; align-items: center; gap: 6px; letter-spacing: 1px; }
+#tEdit input[type=range] { width: 110px; accent-color: var(--accent); }
+#tEdit button { font: 700 14px Rajdhani, sans-serif; letter-spacing: 2px; padding: 6px 14px; border: 1px solid var(--line); background: transparent; color: var(--hud); }
+#tEdit #tEdDone { background: var(--accent); color: #0c0f0d; border: 0; }
