@@ -418,6 +418,12 @@
         .go(2.5, 0, { s: 2.4, m: { axis: 'side', amp: 3.5, speed: 1.9 } }).go(2.5, 0, { s: 2.4, m: { axis: 'side', amp: 3.5, speed: 0.8, phase: 2 } }).go(2.5, 0, { s: 2.4, m: { axis: 'side', amp: 3.5, speed: 1.4 } }).check()
         .go(2.6, 0, { s: 2.2, m: { axis: 'side', amp: 4, speed: 2 } }).go(2.6, 0, { s: 2.2, m: { axis: 'side', amp: 4, speed: 1.2, phase: 1 } }).finish(),
     },
+    {
+      name: 'Needle Point', sky: 0xd9a98a, tip: 'Tiny one-step pillars. Land softly, then go again.',
+      plats: course().stairs(5, 2.4, 0, 1.2).check(2.4)
+        .zig(5, 2.6, 0.3, 30, 1.1).check(2.4)
+        .stairs(5, 2.8, 0, 1, { type: 'crumble' }).finish(3),
+    },
   ];
 
   // ---------- storage ----------
