@@ -36,8 +36,8 @@
   const M = {};
   function mats() {
     if (M.metal) return M;
-    M.metal = new THREE.MeshStandardMaterial({ color: 0x2b2e30, roughness: 0.42, metalness: 0.75 });
-    M.poly = new THREE.MeshStandardMaterial({ color: 0x1c1d1f, roughness: 0.8, metalness: 0.1 });
+    M.metal = new THREE.MeshStandardMaterial({ color: 0x666b70, roughness: 0.45, metalness: 0.25 });
+    M.poly = new THREE.MeshStandardMaterial({ color: 0x4a4c50, roughness: 0.7, metalness: 0.05 });
     M.tan = new THREE.MeshStandardMaterial({ color: 0x8c7a58, roughness: 0.75, metalness: 0.05 });
     M.green = new THREE.MeshStandardMaterial({ color: 0x48553a, roughness: 0.7, metalness: 0.1 });
     M.glass = new THREE.MeshStandardMaterial({ color: 0x223344, roughness: 0.1, metalness: 0.9 });

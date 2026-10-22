@@ -41,11 +41,12 @@
 
   function buildWorld() {
     const scene = G.scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0xb8b6a8, 70, 230);
+    scene.fog = new THREE.Fog(0xb8b6a8, 60, 260);
     scene.background = new THREE.Color(0xb8b6a8);
     const sky = new THREE.Mesh(new THREE.SphereGeometry(400, 32, 16), new THREE.MeshBasicMaterial({ map: VG.Tex.sky(), side: THREE.BackSide, fog: false, depthWrite: false }));
     scene.add(sky);
-    scene.add(new THREE.HemisphereLight(0xd6e6ff, 0x6b5a45, 1.15));
+    scene.add(new THREE.HemisphereLight(0xd6e6ff, 0x7a6a55, 1.6));
+    scene.add(new THREE.AmbientLight(0xfff6e8, 0.55));
     const sun = G.sun = new THREE.DirectionalLight(0xfff0d6, 2.8);
     sun.position.set(38, 75, 22); sun.target.position.set(0, 0, 0);
     sun.castShadow = true;
@@ -57,7 +58,7 @@
     // viewmodel scene, rendered on top after clearing depth so guns never clip into walls
     G.vmScene = new THREE.Scene();
     G.vmCamera = new THREE.PerspectiveCamera(54, innerWidth / innerHeight, 0.01, 10);
-    G.vmScene.add(new THREE.HemisphereLight(0xe0ecff, 0x5a4c3c, 1.6));
+    G.vmScene.add(new THREE.HemisphereLight(0xe0ecff, 0x6a5c4c, 2.2));
     const key = new THREE.DirectionalLight(0xfff0d6, 2.2); key.position.set(0.6, 1, 0.4); G.vmScene.add(key);
     G.vmRoot = new THREE.Group(); G.vmScene.add(G.vmRoot);
 
@@ -368,9 +369,9 @@
       G.teamKills = [0, 0]; G.timeLeft = 600; G.now = 0; G.timeScale = 1;
       G.uavReady = G.airReady = G.uavEarned = G.airEarned = false; G.uavT = 0; G.uavSnap = new Map(); G.airPending = null;
       G.firstBlood = false; G.ended = false; G.deathCam = null; G.respawnT = 0;
+      HUD.init(G);
       G.respawnPlayer();
       for (const b of G.bots) G.respawn(b);
-      HUD.init(G);
       HUD.setDeath(false); HUD.showBoard(false);
       $('loading').classList.add('hidden'); $('menu').classList.add('hidden'); $('end').classList.add('hidden');
       $('hud').classList.remove('hidden');
@@ -494,6 +495,9 @@
     } else cam.rotation.z += dt * 0.3;
     if (cam.fov !== VG.vfov(G.settings.fov)) { cam.fov = VG.vfov(G.settings.fov); cam.updateProjectionMatrix(); }
   }
+
+  // test hook: fast-forward the simulation without rendering
+  G._sim = (secs) => { for (let i = 0; i < secs * 60 && G.running; i++) { G.now += 1 / 60; if (!G.ended) G.timeLeft -= 1 / 60; step(1 / 60, 1 / 60); input.pressed = {}; } };
 
   addEventListener('resize', () => {
     if (!renderer) return;

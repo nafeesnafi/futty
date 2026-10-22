@@ -9,6 +9,7 @@ games/football/index.html  ← Futty Football
 games/racing/index.html    ← Supercar Rush
 games/parkour/index.html   ← Sky Runner (3D)
 games/champions/index.html ← Futt Champions (3D, online)
+games/vanguard/index.html  ← Vanguard Web (3D first-person shooter)
 games/shared/lib/          ← three.js and PeerJS (vendored, MIT)
 ```
 
@@ -90,3 +91,28 @@ file directly works for vs-bot only in some browsers, and sandboxed previews blo
 
 For local testing you can point the game at your own PeerServer:
 `index.html?peerhost=localhost&peerport=9000&peerpath=/myapp&peersecure=0`.
+
+## 🎯 Vanguard Web (3D first-person deathmatch)
+
+A first-person shooter against bots on **Compound**, a three-lane map: a warehouse on the left flank
+(close quarters), a container courtyard in the middle, and a long alley with a sniper balcony on the right
+(reached by a ladder or stairs). Play free-for-all or team deathmatch with 5 to 7 bots; the first to 30 kills
+wins (10-minute limit). Every sound is generated in the browser with the Web Audio API.
+
+| Action | Keyboard / mouse |
+| --- | --- |
+| Move / sprint | WASD / Shift |
+| Crouch (slide while sprinting) | C (toggle) or hold Ctrl |
+| Jump · climb ladders | Space · W at a ladder |
+| Fire / aim down sights | Left / right mouse button |
+| Reload | R |
+| Weapons (M4A1, MP5, AX-50 sniper) | 1 2 3 or mouse wheel |
+| UAV (3-kill streak) / airstrike (5-kill streak) | 4 / 5 |
+| Hold breath while scoped | Shift |
+| Scoreboard · FPS counter · pause | Tab · F · Esc |
+
+Health regenerates after 4 seconds without damage. Headshots deal double damage (triple with the sniper),
+and bullets go through wooden crates and railings. Enemies show on the radar for a moment when they fire.
+Bots patrol, react to gunfire, strafe in fights and retreat to cover when they are hurt. Difficulty
+(Recruit / Regular / Veteran) changes their reaction time, accuracy and damage.
+Code: `games/vanguard/js/` (map, physics, nav, player, bots, weapons, fx, hud, audio, game).

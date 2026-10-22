@@ -4,7 +4,7 @@
   const VG = window.VG = window.VG || {};
   const P = VG.Phys, A = VG.Audio;
   const D2R = Math.PI / 180;
-  const HIP = new THREE.Vector3(0.15, -0.165, -0.36);
+  const HIP = new THREE.Vector3(0.17, -0.2, -0.5);
   const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
   const lerp = (a, b, t) => a + (b - a) * t;
   const ease = (t) => t * t * (3 - 2 * t);
@@ -310,7 +310,7 @@
       this.swayY += (ty - this.swayY) * Math.min(1, dt * 7);
       const swK = 1 - adsE * 0.85;
       // positions
-      const adsPos = tmp.set(0, -vm.sightY, -0.3);
+      const adsPos = tmp.set(0, -vm.sightY, this.def.id === 'smg' ? -0.36 : -0.4);
       const p = tmp2.copy(HIP).lerp(adsPos, adsE);
       const bobX = Math.sin(this.bob) * this.bobAmp * 0.35, bobY = -Math.abs(Math.cos(this.bob)) * this.bobAmp * 0.35;
       const idle = Math.sin(now * 1.5) * 0.0025 * swK;
@@ -322,7 +322,7 @@
       this.sprintPose = (this.sprintPose || 0) + ((this.sprint ? 1 : 0) - (this.sprintPose || 0)) * Math.min(1, dt * 9);
       const sp = ease(this.sprintPose);
       p.x += -0.04 * sp; p.y += -0.05 * sp; p.z += 0.03 * sp;
-      rx += -0.35 * sp; ry += 0.7 * sp; rz += 0.25 * sp;
+      rx += -0.3 * sp; ry += 0.45 * sp; rz += 0.2 * sp;
       p.y += Math.sin(this.bob * 2) * 0.012 * sp; p.x += Math.sin(this.bob) * 0.02 * sp;
       // slide tilt
       if (this.sliding) { rz += 0.25; p.x -= 0.03; }
@@ -339,7 +339,7 @@
       rig.position.copy(p); rig.rotation.set(rx, ry, rz);
       root.visible = !scoped && this.alive;
       if (this.flashT > 0) { this.flashT -= dt; if (this.flashT <= 0) vm.flash.visible = false; }
-      g.vmCamera.fov = 54 - adsE * 8;
+      g.vmCamera.fov = 58 - adsE * 8;
       g.vmCamera.updateProjectionMatrix();
     }
   }

@@ -37,7 +37,7 @@
         else b.uv.push(p[0] / s, p[1] / s);
         let c = 1;
         if (ao) {
-          if (n[1] === 0) c = 0.5 + 0.5 * Math.min(1, (p[1] - y0 + (y0 > 0.05 ? 1.2 : 0)) / 2.4);
+          if (n[1] === 0) c = 0.62 + 0.38 * Math.min(1, (p[1] - y0 + (y0 > 0.05 ? 1.2 : 0)) / 2.4);
           else if (n[1] < 0) c = 0.55;
         }
         b.col.push(c, c, c);
@@ -150,7 +150,7 @@
     mats = {
       concrete: std({ map: T.concrete() }),
       brick: std({ map: T.brick() }),
-      metal: std({ map: T.metal(), roughness: 0.6, metalness: 0.35, color: 0xb9c0c0 }),
+      metal: std({ map: T.metal(), roughness: 0.65, metalness: 0.1, color: 0xc4cac8 }),
       wood: std({ map: T.wood(), roughness: 0.85 }),
       plywood: std({ map: T.plywood() }),
       barrier: std({ map: T.barrier() }),
@@ -158,12 +158,12 @@
       contBlue: std({ map: T.container(), color: 0x2f5c8a, roughness: 0.7, metalness: 0.2 }),
       contGreen: std({ map: T.container(), color: 0x4c6b3a, roughness: 0.7, metalness: 0.2 }),
       contOrange: std({ map: T.container(), color: 0xc4772b, roughness: 0.7, metalness: 0.2 }),
-      dark: std({ color: 0x2b2d2e, roughness: 0.6, metalness: 0.5 }),
+      dark: std({ color: 0x6a6e70, roughness: 0.7, metalness: 0.2 }),
       rail: std({ color: 0x5a5f5e, roughness: 0.5, metalness: 0.6 }),
-      roof: std({ map: T.metal(), color: 0x7d8584, roughness: 0.7, metalness: 0.3 }),
+      roof: std({ map: T.metal(), color: 0xd0d4d2, roughness: 0.8, metalness: 0, emissive: 0x2a2a28 }),
       floor: std({ map: T.concrete(), color: 0xbab3a3 }),
       lamp: new THREE.MeshBasicMaterial({ color: 0xfff1c8 }),
-      skyline: new THREE.MeshLambertMaterial({ color: 0x6f7a80 }),
+      skyline: new THREE.MeshLambertMaterial({ color: 0x9aa6ad }),
     };
     if (gfx === 0) for (const k in mats) if (mats[k].map) mats[k].map.anisotropy = 1;
   }
@@ -273,7 +273,7 @@
     // ===== skyline outside the walls (no collision) =====
     const rng = mulberry(7);
     for (let i = 0; i < 46; i++) {
-      const a = (i / 46) * Math.PI * 2, r = 78 + rng() * 50;
+      const a = (i / 46) * Math.PI * 2, r = 105 + rng() * 60;
       const x = Math.cos(a) * r * 0.9, z = Math.sin(a) * r, w = 8 + rng() * 14, d = 8 + rng() * 14, h = 10 + rng() * 34;
       visBox(x - w / 2, 0, z - d / 2, x + w / 2, h, z + d / 2, 'skyline', { noAO: true });
     }
@@ -283,7 +283,7 @@
     // barrels as one instanced mesh
     const bg = new THREE.CylinderGeometry(0.3, 0.3, 0.9, 14);
     bg.translate(0, 0.45, 0);
-    const bm = new THREE.MeshStandardMaterial({ color: 0x7a2a1f, roughness: 0.55, metalness: 0.4, map: VG.Tex.metal() });
+    const bm = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, metalness: 0.1, map: VG.Tex.metal() });
     const inst = new THREE.InstancedMesh(bg, bm, barrels.length);
     const mtx = new THREE.Matrix4();
     barrels.forEach(([x, z], i) => {
