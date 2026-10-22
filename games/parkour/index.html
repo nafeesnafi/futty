@@ -288,6 +288,12 @@
         .zig(4, 2.8, -0.8, 35, 2.6).check(2.5, -1)
         .crumbles(3, 2.8, -0.6, 2.6).go(3, -1).finish(3, -1),
     },
+    {
+      name: 'Pogo', sky: 0xedc98f, tip: 'Chain bounce pads together. Each one sends you higher.',
+      plats: course().go(2.5).pad(2.5).pad(3, 4).pad(3, 4).go(3, 4).check()
+        .pad(2.5).pad(3, 4).go(3, 4.5).check()
+        .pad(2.5, -2).pad(3, 3).pad(3, 3).finish(3.5, 4.5),
+    },
   ];
 
   // ---------- storage ----------

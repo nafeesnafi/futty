@@ -65,6 +65,7 @@ level as fast as you can:
 13. **Long Jumps**: wider gaps. Hold Shift (or push the stick all the way) to sprint before you jump
 14. **Ferry Crossing**: platforms slide toward you and away. Jump when they are closest
 15. **Gentle Descent**: down we go. Big drops are safe, just land on the platform
+16. **Pogo**: chain bounce pads together. Each one sends you higher
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 
