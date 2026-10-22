@@ -18,6 +18,7 @@ var FC = window.FC = window.FC || {};
   };
 
   if (matchMedia('(pointer: coarse)').matches) document.body.classList.add('touch');
+  FC.Input.bindTouch($('touch'));
 
   // ---------- helpers ----------
   function kitCss(k) {
@@ -150,7 +151,7 @@ var FC = window.FC = window.FC || {};
     const H = FC.TEAMS[cfg.home], A = FC.TEAMS[cfg.away];
     $('sbH').textContent = H.short; $('sbA').textContent = A.short;
     $('sbKitH').style.background = kitCss(S.kits[0]); $('sbKitA').style.background = kitCss(S.kits[1]);
-    if (cfg.role === 'guest') { S.match = null; }
+    if (cfg.role === 'guest') { S.match = null; S.view = null; S.hud = null; }
     else {
       const controllers = cfg.role === 'demo' ? [{ type: 'ai', difficulty: 'hard' }, { type: 'ai', difficulty: 'hard' }]
         : cfg.role === 'local' ? [{ type: 'human' }, { type: 'ai', difficulty: cfg.difficulty }]
