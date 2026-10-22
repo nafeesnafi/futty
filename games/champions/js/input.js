@@ -9,7 +9,7 @@ var FC = window.FC = window.FC || {};
   const listeners = [];
   let charge = null;          // { t0 } while the shoot button is held
   let enabled = false;
-  const touch = { x: 0, y: 0, sprint: false, active: false };
+  const touch = { x: 0, y: 0, sprint: false, active: false, shield: false };
   const pad = { prev: {} };
 
   const MAP = {
@@ -62,7 +62,7 @@ var FC = window.FC = window.FC || {};
     let x = gp.axes[0] || 0, y = -(gp.axes[1] || 0);
     if (Math.hypot(x, y) < 0.18) { x = 0; y = 0; }
     if (btn(14)) x = -1; if (btn(15)) x = 1; if (btn(12)) y = 1; if (btn(13)) y = -1;
-    return { x, y, sprint: btn(5) || btn(7) };
+    return { x, y, sprint: btn(5) || btn(7), shield: btn(4) };
   }
 
   FC.Input = {
@@ -76,14 +76,18 @@ var FC = window.FC = window.FC || {};
       let x = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
       let y = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0);
       let sprint = !!(keys.ShiftLeft || keys.ShiftRight);
+      // holding Switch while on the ball shields it
+      let shield = MAP.switch.some(k => keys[k]);
       const g = pollGamepad();
       if (g && (g.x || g.y)) { x = g.x; y = g.y; }
       if (g && g.sprint) sprint = true;
+      if (g && g.shield) shield = true;
+      if (touch.shield) shield = true;
       if (touch.active) { x = touch.x; y = touch.y; }
       if (touch.sprint) sprint = true;
       const n = Math.hypot(x, y);
       if (n > 1) { x /= n; y /= n; }
-      return { x, y, sprint };
+      return { x, y, sprint, shield };
     },
 
     // on-screen controls for phones/tablets
@@ -106,8 +110,9 @@ var FC = window.FC = window.FC || {};
         b.addEventListener('pointerdown', e => {
           e.preventDefault(); b.setPointerCapture(e.pointerId); b.classList.add('down');
           if (a === 'shoot') startCharge(); else if (a === 'sprint') touch.sprint = true; else fire(a);
+          if (a === 'switch') touch.shield = true;
         });
-        const up = () => { b.classList.remove('down'); if (a === 'shoot') releaseCharge(); if (a === 'sprint') touch.sprint = false; };
+        const up = () => { b.classList.remove('down'); if (a === 'shoot') releaseCharge(); if (a === 'sprint') touch.sprint = false; if (a === 'switch') touch.shield = false; };
         b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
       }
     },

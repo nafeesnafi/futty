@@ -329,13 +329,13 @@ var FC = window.FC = window.FC || {};
     if (S.role === 'guest') {
       if (FC.Net) {
         const inp = FC.Input.poll(), w = toWorld(inp.x, inp.y);
-        FC.Net.guestTick(dt, w.x, w.z, inp.sprint);
+        FC.Net.guestTick(dt, w.x, w.z, inp.sprint, inp.shield);
       }
     } else if (S.match && !S.paused) {
       if (S.role !== 'demo') {
         const inp = document.body.classList.contains('playing') ? FC.Input.poll() : { x: 0, y: 0, sprint: false };
         const w = toWorld(inp.x, inp.y);
-        S.match.setInput(S.myTeam, w.x, w.z, inp.sprint);
+        S.match.setInput(S.myTeam, w.x, w.z, inp.sprint, inp.shield);
       }
       S.acc += dt;
       let n = 0;

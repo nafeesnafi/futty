@@ -6,6 +6,8 @@ var FC = window.FC = window.FC || {};
 (() => {
   const PL = 105, PW = 68, HL = PL / 2, HW = PW / 2, GOAL_W = 7.32, GOAL_H = 2.44, BALL_R = 0.11;
   const G = 9.81;
+  const MAGNUS = 0.012;      // lift per (rad/s x m/s): ~2 m of curl on a 25 m finesse shot
+  const SPIN_DECAY = 0.5;    // spin loss per second in flight
 
   // 4-3-3 in the team's own frame: x from -1 (own goal) to 1 (opponent goal), z from -1 to 1.
   const FORMATION = [
@@ -33,7 +35,7 @@ var FC = window.FC = window.FC || {};
       this.halfSeconds = halfSeconds;
       this.ctrl = controllers.map(c => ({
         type: c.type, diff: DIFFICULTY[c.difficulty || 'normal'],
-        input: { x: 0, z: 0, sprint: false }, actions: [], active: -1,
+        input: { x: 0, z: 0, sprint: false, shield: false }, actions: [], active: -1,
       }));
       this.players = [];
       for (let t = 0; t < 2; t++) {
@@ -44,10 +46,14 @@ var FC = window.FC = window.FC || {};
             id: t * 11 + i, team: t, idx: i, role: f.role, base: f,
             rating: r + (f.role === 'fwd' ? 1 : 0),
             x: 0, z: 0, vx: 0, vz: 0, face: 0, kickT: 0, stunT: 0, tackleCd: 0, dive: 0, decideT: 0, plan: null,
+            touchCd: 0, jumpT: 0, headBuf: 0, headAct: null, headDir: null, pending: null, shield: false, shieldT: 0, knock: false,
           });
         }
       }
-      this.ball = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, owner: -1, lastTouch: -1, lastTeam: 0, noPick: -1, noPickT: 0, receiver: -1, shot: null, protectT: 0 };
+      this.ball = {
+        x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, sx: 0, sy: 0, sz: 0, knuckle: 0, kT: 0, kax: 0, kay: 0, glued: false,
+        owner: -1, lastTouch: -1, lastTeam: 0, noPick: -1, noPickT: 0, receiver: -1, shot: null, protectT: 0,
+      };
       this.score = [0, 0];
       this.clock = 0;            // real seconds elapsed in the current half
       this.half = 1;
@@ -72,7 +78,7 @@ var FC = window.FC = window.FC || {};
     }
 
     // ---------- external control ----------
-    setInput(team, x, z, sprint) { const c = this.ctrl[team]; c.input.x = x; c.input.z = z; c.input.sprint = !!sprint; }
+    setInput(team, x, z, sprint, shield) { const c = this.ctrl[team]; c.input.x = x; c.input.z = z; c.input.sprint = !!sprint; c.input.shield = !!shield; }
     queueAction(team, a) { this.ctrl[team].actions.push(a); }
     setController(team, type, difficulty) {
       const c = this.ctrl[team]; c.type = type; c.diff = DIFFICULTY[difficulty || 'normal']; c.actions = [];
@@ -105,7 +111,8 @@ var FC = window.FC = window.FC || {};
     }
 
     resetBall(x, z) {
-      Object.assign(this.ball, { x, y: 0, z, vx: 0, vy: 0, vz: 0, owner: -1, receiver: -1, shot: null, noPick: -1 });
+      Object.assign(this.ball, { x, y: 0, z, vx: 0, vy: 0, vz: 0, sx: 0, sy: 0, sz: 0, knuckle: 0, glued: false, owner: -1, receiver: -1, shot: null, noPick: -1 });
+      for (const p of this.players) { p.pending = null; p.headBuf = 0; p.shield = false; }
     }
 
     startSetpiece(type, team, x, z) {
@@ -156,9 +163,12 @@ var FC = window.FC = window.FC || {};
     possessionTeam() { return this.ball.owner >= 0 ? this.players[this.ball.owner].team : -1; }
 
     // ---------- kicking ----------
-    kickBall(p, vx, vy, vz, receiver = -1) {
+    kickBall(p, vx, vy, vz, receiver = -1, spin) {
       const b = this.ball;
-      b.owner = -1; b.vx = vx; b.vy = vy; b.vz = vz;
+      b.owner = -1; b.vx = vx; b.vy = vy; b.vz = vz; b.glued = false;
+      b.sx = spin ? spin.x || 0 : 0; b.sy = spin ? spin.y || 0 : 0; b.sz = spin ? spin.z || 0 : 0;
+      b.knuckle = spin && spin.knuckle || 0; b.kT = 0;
+      p.pending = null;
       b.y = Math.max(b.y, 0.01);
       b.lastTouch = p.id; b.lastTeam = p.team;
       b.noPick = p.id; b.noPickT = 0.35;
@@ -200,7 +210,8 @@ var FC = window.FC = window.FC || {};
       this.kickBall(p, dx / n * sp, through ? 3 : 0, dz / n * sp, -1);
     }
 
-    shoot(p, power, aimZ, errMul) {
+    // opts: { curl: -1..1 (finesse: bends into the corner), header: true }
+    shoot(p, power, aimZ, errMul, opts = {}) {
       const b = this.ball, d = this.dir(p.team);
       const gx = d * (HL + 0.5);
       // aim near a post unless told otherwise
@@ -208,21 +219,38 @@ var FC = window.FC = window.FC || {};
                             : (b.z > 0 ? -1 : 1) * rand(2.0, 3.5);
       const dist = hyp(gx - b.x, tz - b.z);
       power = clamp(power, 0.05, 1);
-      const speed = 15 + power * 16;
+      const curl = clamp(opts.curl || 0, -1, 1);
+      let speed = opts.header ? 10 + power * 7 : 15 + power * 16;
+      if (curl) speed *= 0.88;
       const quality = this.rf(p);
       let err = (errMul || 0.05) * (1.4 - quality) * 4.5 + Math.max(0, power - 0.82) * 0.22 + dist / 500;
-      const ang = Math.atan2(tz - b.z, gx - b.x) + rand(-err, err);
-      const ty = clamp(0.25 + power * 1.5 + rand(-0.4, 0.4) + Math.max(0, power - 0.88) * rand(0, 5), 0.15, 4);
+      if (curl) err *= 0.8;
+      if (opts.header) err *= 1.3;
+      let ty = opts.header ? rand(0.15, 1.1)
+        : clamp(0.25 + power * 1.5 + rand(-0.4, 0.4) + Math.max(0, power - 0.88) * rand(0, 5), 0.15, 4);
       const T = dist / speed;
+      // finesse: aim outside the target and let Magnus lift bend it back in toward the middle of the goal
+      let ax = gx, az = tz, spin = null;
+      if (curl) {
+        const ux = (gx - b.x) / dist, uz = (tz - b.z) / dist, nz = -ux;           // n = (uz, -ux)
+        const mag = 10 + Math.abs(curl) * 8;
+        const towardCentre = -Math.sign(tz) || 1;
+        const sy = mag * Math.sign(nz * towardCentre);
+        const disp = 0.5 * MAGNUS * Math.abs(sy) * speed * T * T * 0.86;   // 0.86: spin decay + drag shorten the real bend
+        ax = gx - uz * disp * Math.sign(sy); az = tz + ux * disp * Math.sign(sy);
+        spin = { y: sy };
+      } else if (!opts.header && power > 0.9) spin = { knuckle: 3 };             // full-power strikes wobble
+      const ang = Math.atan2(az - b.z, ax - b.x) + rand(-err, err);
       const vy = (ty - b.y) / T + 0.5 * G * T;
-      this.kickBall(p, Math.cos(ang) * speed, vy, Math.sin(ang) * speed, -1);
+      this.kickBall(p, Math.cos(ang) * speed, vy, Math.sin(ang) * speed, -1, spin);
       this.ball.shot = { team: p.team, by: p.id, saved: false, counted: false };
       this.stats.shots[p.team]++;
-      // predict on target
+      // predict on target (ignoring curl, which by design ends near the aim point)
       const tt = (gx - b.x) / (Math.cos(ang) * speed);
-      const zc = b.z + Math.sin(ang) * speed * tt, yc = b.y + vy * tt - 0.5 * G * tt * tt;
+      const zc = curl ? tz + (ang - Math.atan2(az - b.z, ax - b.x)) * dist : b.z + Math.sin(ang) * speed * tt;
+      const yc = b.y + vy * tt - 0.5 * G * tt * tt;
       if (Math.abs(zc) < GOAL_W / 2 && yc < GOAL_H && yc > -0.5) this.stats.onTarget[p.team]++;
-      this.emit('shot', { by: p.id });
+      this.emit('shot', { by: p.id, header: !!opts.header, curl: !!curl });
     }
 
     // choose a pass target; dir = preferred direction (unit) or null for AI "best option"
@@ -271,7 +299,7 @@ var FC = window.FC = window.FC || {};
       if (dist > reach) { if (slide) p.stunT = 0.9; return false; }
       const c = this.ctrl[p.team];
       const base = c.type === 'human' && c.active === p.id ? HUMAN.tackle : c.diff.tackle;
-      const chance = clamp(base + (p.rating - o.rating) * 0.015 + (slide ? 0.1 : 0) - dist * 0.08, 0.1, 0.9);
+      const chance = clamp(base + (p.rating - o.rating) * 0.015 + (slide ? 0.1 : 0) - dist * 0.08 - (o.shield ? 0.25 : 0), 0.05, 0.9);
       if (Math.random() < chance) {
         b.owner = -1; b.lastTouch = p.id; b.lastTeam = p.team;
         if (Math.random() < 0.55 && !slide) { b.owner = p.id; b.protectT = 0.6; this.onPossession(p); }
@@ -351,8 +379,9 @@ var FC = window.FC = window.FC || {};
 
       this.ballPhysics(dt);
       this.movePlayers(dt, false);
-      this.checkPickup();
+      this.runPending(dt);
       this.goalkeepers(dt);
+      this.checkPickup();
       this.checkOut();
     }
 
@@ -388,31 +417,58 @@ var FC = window.FC = window.FC || {};
             continue;
           }
           if (c.active < 0) continue;
-          const p = this.players[c.active];
-          const inSetpiece = (this.phase === 'kickoff' || this.phase === 'setpiece') && this.setpiece.team === t && this.setpiece.taker === p.id;
-          const hasBall = this.ball.owner === p.id || inSetpiece;
-          let dx = a.x, dz = a.z;
-          if (!dx && !dz) { dx = Math.sin(p.face); dz = Math.cos(p.face); }
-          // kick-off with no direction held: play it back to a team-mate
-          if (inSetpiece && this.phase === 'kickoff' && hyp(a.x, a.z) < 0.2) { dx = -this.dir(t); dz = 0.3; }
-          if (hasBall) {
-            if (inSetpiece) this.beginPlayFromSetpiece();
-            if (a.a === 'shoot') {
-              // steer toward a post by holding a sideways direction; otherwise aim far post
-              const aim = Math.abs(a.z) > 0.3 ? Math.sign(a.z) * 2.8 : null;
-              this.shoot(p, a.power != null ? a.power : 0.6, aim, HUMAN.shotErr);
-            } else {
-              const through = a.a === 'through';
-              const best = this.bestPass(p, dx, dz, false);
-              if (best) { this.passTo(p, best.q, through, HUMAN.passErr); c.active = best.q.id; }
-              else this.passInto(p, dx, dz, through);
-            }
-          } else if (this.phase === 'play') {
-            // defending: pass key = tackle, shoot key = slide tackle
-            if (a.a === 'pass' || a.a === 'through') this.tryTackle(p, false);
-            else if (a.a === 'shoot') this.tryTackle(p, true);
-          }
+          this.doAction(t, this.players[c.active], a);
         }
+      }
+    }
+
+    doAction(t, p, a) {
+      const c = this.ctrl[t], b = this.ball;
+      const inSetpiece = (this.phase === 'kickoff' || this.phase === 'setpiece') && this.setpiece.team === t && this.setpiece.taker === p.id;
+      let dx = a.x, dz = a.z;
+      if (!dx && !dz) { dx = Math.sin(p.face); dz = Math.cos(p.face); }
+      // kick-off with no direction held: play it back to a team-mate
+      if (inSetpiece && this.phase === 'kickoff' && hyp(a.x, a.z) < 0.2) { dx = -this.dir(t); dz = 0.3; }
+      const near = hyp(b.x - p.x, b.z - p.z);
+      if (b.owner === p.id && !inSetpiece && near > 1.4) { p.pending = { a, t: 0.6 }; return; }   // run onto the touch, then play it
+      if (b.owner === p.id || inSetpiece) {
+        if (inSetpiece) this.beginPlayFromSetpiece();
+        p.pending = null;
+        if (a.a === 'shoot') {
+          // hold a sideways direction to aim at a post and curl it into the corner (finesse)
+          const lateral = Math.abs(a.z) > 0.3;
+          const aim = lateral ? Math.sign(a.z) * 2.8 : null;
+          this.shoot(p, a.power != null ? a.power : 0.6, aim, HUMAN.shotErr, { curl: lateral ? Math.min(1, Math.abs(a.z)) : 0 });
+        } else {
+          const through = a.a === 'through';
+          const best = this.bestPass(p, dx, dz, false);
+          if (best) { this.passTo(p, best.q, through, HUMAN.passErr); c.active = best.q.id; }
+          else this.passInto(p, dx, dz, through);
+        }
+        return;
+      }
+      if (this.phase !== 'play') return;
+      // ball in the air or on its way to you: queue a header / volley / first-time pass
+      if (b.owner < 0 && near < 4.5 && (b.y > 0.3 || b.vy > 0.5 || b.receiver === p.id)) {
+        p.headBuf = 0.45; p.headAct = a.a; p.headDir = { x: dx, z: dz }; p.headPower = a.power;
+        return;
+      }
+      // defending: pass key = tackle, shoot key = slide tackle
+      if (a.a === 'pass' || a.a === 'through') this.tryTackle(p, false);
+      else if (a.a === 'shoot') this.tryTackle(p, true);
+    }
+
+    // actions pressed while the ball was a step ahead are played once the carrier reaches it
+    runPending(dt) {
+      for (let t = 0; t < 2; t++) {
+        const c = this.ctrl[t];
+        if (c.type !== 'human' || c.active < 0) continue;
+        const p = this.players[c.active];
+        if (!p.pending) continue;
+        p.pending.t -= dt;
+        const b = this.ball;
+        if (b.owner !== p.id || p.pending.t <= 0) { p.pending = null; continue; }
+        if (hyp(b.x - p.x, b.z - p.z) <= 1.4) { const a = p.pending.a; p.pending = null; this.doAction(t, p, a); }
       }
     }
 
@@ -448,29 +504,92 @@ var FC = window.FC = window.FC || {};
       const b = this.ball;
       if (b.protectT > 0) b.protectT -= dt;
       if (b.noPickT > 0) { b.noPickT -= dt; if (b.noPickT <= 0) b.noPick = -1; }
-      if (b.owner >= 0) {
-        const p = this.players[b.owner];
-        const sp = hyp(p.vx, p.vz);
-        const reach = 0.55 + (sp > 6.5 ? 0.35 : 0);
-        const tx = p.x + Math.sin(p.face) * reach, tz = p.z + Math.cos(p.face) * reach;
-        const k = Math.min(1, dt * 14);
-        b.vx = (tx - b.x) / Math.max(dt, 1e-3) * k; b.vz = (tz - b.z) / Math.max(dt, 1e-3) * k;
-        b.x += (tx - b.x) * k; b.z += (tz - b.z) * k; b.y = 0; b.vy = 0;
-        return;
-      }
+      if (b.owner >= 0) { this.dribble(dt); if (b.glued) return; }
       const prevX = b.x;
+      const airborne = b.y > 0.01 || b.vy > 0;
+      if (airborne) {
+        // Magnus lift: a = k (w x v)
+        b.vx += MAGNUS * (b.sy * b.vz - b.sz * b.vy) * dt;
+        b.vy += MAGNUS * (b.sz * b.vx - b.sx * b.vz) * dt;
+        b.vz += MAGNUS * (b.sx * b.vy - b.sy * b.vx) * dt;
+        // knuckleball: an unspun power shot wobbles as the air flow around it changes
+        if (b.knuckle > 0) {
+          b.kT -= dt;
+          if (b.kT <= 0) { b.kT = 0.12; b.kax = rand(-1, 1) * b.knuckle; b.kay = rand(-1, 1) * b.knuckle * 0.6; }
+          const s = hyp(b.vx, b.vz) || 1;
+          b.vx += -b.vz / s * b.kax * dt; b.vz += b.vx / s * b.kax * dt; b.vy += b.kay * dt;
+        }
+        const f = Math.exp(-SPIN_DECAY * dt); b.sx *= f; b.sy *= f; b.sz *= f;
+      }
       b.vy -= G * dt;
       b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
       if (b.y <= 0) {
         b.y = 0;
-        if (b.vy < -1.2) { b.vy = -b.vy * 0.5; b.vx *= 0.9; b.vz *= 0.9; } else b.vy = 0;
+        if (b.vy < -1.2) { b.vy = -b.vy * 0.5; b.vx *= 0.9; b.vz *= 0.9; b.sy *= 0.6; b.sx *= 0.4; b.sz *= 0.4; b.knuckle = 0; } else b.vy = 0;
       }
       if (b.y === 0 && b.vy === 0) {
         const s = hyp(b.vx, b.vz);
         const ns = Math.max(0, s - (0.6 + s * 0.45) * dt);
         if (s > 0) { b.vx *= ns / s; b.vz *= ns / s; }
+        b.sx = b.sy = b.sz = 0; b.knuckle = 0;
       } else { b.vx *= 1 - 0.08 * dt; b.vz *= 1 - 0.08 * dt; }
       this.goalFrame(prevX);
+    }
+
+    // The carrier no longer has the ball glued to his boot: he taps it ahead and runs onto it.
+    // Close control (slow) keeps it at the feet; shielding keeps the body between ball and defender.
+    dribble(dt) {
+      const b = this.ball, p = this.players[b.owner];
+      const spd = hyp(p.vx, p.vz);
+      const rx = b.x - p.x, rz = b.z - p.z, dist = hyp(rx, rz);
+      if (dist > 3.4 || b.y > 1.0) { this.loseBall(); return; }
+      if (p.touchCd > 0) p.touchCd -= dt;
+      let dx, dz;
+      if (spd > 0.5) { dx = p.vx / spd; dz = p.vz / spd; } else { dx = Math.sin(p.face); dz = Math.cos(p.face); }
+      if (p.shield) {
+        const o = this.nearestOpp(p);
+        let ux = dx, uz = dz;
+        if (o) { const n = hyp(p.x - o.x, p.z - o.z) || 1; ux = (p.x - o.x) / n; uz = (p.z - o.z) / n; }
+        this.glue(p.x + ux * 0.55, p.z + uz * 0.55, p, dt);
+        return;
+      }
+      // close control when slow, or when a defender is near and the carrier isn't sprinting
+      const opp = this.nearestOpp(p), oppD = opp ? hyp(opp.x - p.x, opp.z - p.z) : 99;
+      if (!p.knock && (spd < 2.6 || (oppD < 3 && spd < 6.4))) { this.glue(p.x + Math.sin(p.face) * 0.5, p.z + Math.cos(p.face) * 0.5, p, dt); return; }
+      b.glued = false;
+      const ahead = rx * dx + rz * dz, side = Math.abs(rx * dz - rz * dx);
+      if (p.touchCd <= 0 && (ahead < 0.65 || side > 0.7)) {
+        const sprinting = spd > 6.4;
+        const push = p.knock ? 7 : sprinting ? 2.8 : 1.3;   // sprint touches are heavier; a knock-on goes ~5 m
+        if (ahead < 0.35 || side > 0.7) { b.x = p.x + dx * 0.45; b.z = p.z + dz * 0.45; }
+        b.vx = dx * (spd + push); b.vz = dz * (spd + push); b.vy = 0; b.y = 0;
+        p.touchCd = p.knock ? 0.6 : sprinting ? 0.35 : 0.25;
+        p.kickT = Math.max(p.kickT, p.knock ? 0.8 : 0.3);
+        if (p.knock) { p.knock = false; this.emit('kick', { power: 0.35 }); }
+      }
+    }
+
+    glue(tx, tz, p, dt) {
+      const b = this.ball, k = Math.min(1, dt * 12);
+      b.glued = true;
+      b.x += (tx - b.x) * k; b.z += (tz - b.z) * k; b.y = 0; b.vy = 0;
+      b.vx = p.vx; b.vz = p.vz; b.sx = b.sy = b.sz = 0;
+    }
+
+    loseBall() {
+      const b = this.ball;
+      b.owner = -1; b.glued = false; b.receiver = -1;
+      for (const p of this.players) p.pending = null;
+    }
+
+    nearestOpp(p) {
+      let best = null, bd = 1e9;
+      for (let j = 0; j < 11; j++) {
+        const o = this.players[(1 - p.team) * 11 + j];
+        const d = hyp(o.x - p.x, o.z - p.z);
+        if (d < bd) { bd = d; best = o; }
+      }
+      return best;
     }
 
     // posts, crossbar and net
@@ -507,7 +626,9 @@ var FC = window.FC = window.FC || {};
 
     checkPickup() {
       const b = this.ball;
-      if (b.owner >= 0 || b.y > 1.9) return;
+      if (b.owner >= 0) { this.checkSteal(); return; }
+      if (b.y > 2.6) return;
+      if (b.y >= 0.95) { this.aerialDuel(); return; }
       let best = null, bd = 1e9;
       for (const p of this.players) {
         if (p.id === b.noPick || p.stunT > 0) continue;
@@ -522,23 +643,113 @@ var FC = window.FC = window.FC || {};
       const block = b.shot && b.shot.team !== best.team && sp > 12;
       if (block) this.emit('block', { by: best.id });
       if (block || (sp > 21 && best.id !== b.receiver && Math.random() < 0.6)) {
-        const a = rand(0, Math.PI * 2);
-        b.vx = b.vx * 0.3 + Math.cos(a) * 3; b.vz = b.vz * 0.3 + Math.sin(a) * 3; b.vy = Math.abs(b.vy) * 0.3 + 1;
-        b.lastTouch = best.id; b.lastTeam = best.team; b.noPick = best.id; b.noPickT = 0.25; b.shot = null;
-        this.emit('kick', { power: 0.3 });
+        this.deflect(best);
         return;
       }
-      // first-time finish for AI attackers near goal (volleys / headers from crosses)
       const c = this.ctrl[best.team];
       const d = this.dir(best.team);
       const distGoal = hyp(d * HL - b.x, b.z);
-      const humanActive = c.type === 'human' && (c.active === best.id || b.receiver === best.id);
-      if (!humanActive && distGoal < 15 && b.y > 0.4 && Math.random() < 0.7) {
+      const humanActive = c.type === 'human' && c.active === best.id;
+      // a human who pressed shoot/pass as the ball arrived plays it first time (volley / one-touch pass)
+      if (humanActive && best.headBuf > 0) { this.firstTime(best, b.y > 0.35 ? 'volley' : 'first'); return; }
+      // first-time finish for AI attackers near goal (volleys from crosses)
+      if (!(c.type === 'human' && (humanActive || b.receiver === best.id)) && distGoal < 15 && b.y > 0.4 && Math.random() < 0.7) {
         best.face = Math.atan2(d * HL - best.x, -best.z);
         this.shoot(best, rand(0.5, 0.8), null, c.diff.shotErr * 1.3);
         return;
       }
       this.onPossession(best);
+    }
+
+    deflect(p) {
+      const b = this.ball, a = rand(0, Math.PI * 2);
+      b.vx = b.vx * 0.3 + Math.cos(a) * 3; b.vz = b.vz * 0.3 + Math.sin(a) * 3; b.vy = Math.abs(b.vy) * 0.3 + 1;
+      b.sx = b.sy = b.sz = 0; b.knuckle = 0;
+      b.lastTouch = p.id; b.lastTeam = p.team; b.noPick = p.id; b.noPickT = 0.25; b.shot = null;
+      this.emit('kick', { power: 0.3 });
+    }
+
+    // Between dribble touches the ball is briefly loose: a defender who gets to it first nicks it.
+    checkSteal() {
+      const b = this.ball, o = this.players[b.owner];
+      if (b.glued || b.protectT > 0 || b.y > 0.8 || this.phase !== 'play') return;
+      const od = hyp(o.x - b.x, o.z - b.z);
+      if (od < 0.85) return;
+      for (let j = 1; j < 11; j++) {
+        const p = this.players[(1 - o.team) * 11 + j];
+        if (p.stunT > 0) continue;
+        const d = hyp(p.x - b.x, p.z - b.z);
+        if (d < 0.75 && d < od && Math.random() < 0.25) {
+          b.lastTouch = p.id; b.lastTeam = p.team;
+          if (Math.random() < 0.5) { b.owner = -1; this.onPossession(p); b.protectT = 0.5; }
+          else { this.loseBall(); const a = p.face + rand(-0.6, 0.6); b.vx = Math.sin(a) * rand(3, 6); b.vz = Math.cos(a) * rand(3, 6); b.noPick = o.id; b.noPickT = 0.3; }
+          this.emit('tackle', { by: p.id, ok: true, nick: true });
+          return;
+        }
+      }
+    }
+
+    // High ball (head height): nearby players jump for it; the best-placed one wins.
+    aerialDuel() {
+      const b = this.ball;
+      const cands = [];
+      for (const p of this.players) {
+        if (p.idx === 0 || p.id === b.noPick || p.stunT > 0) continue;
+        const d = hyp(p.x - b.x, p.z - b.z);
+        if (d < 1.1) {
+          const c = this.ctrl[p.team];
+          const pressed = c.type === 'human' && c.active === p.id && p.headBuf > 0;
+          cands.push({ p, score: p.rating + rand(0, 18) - d * 12 + (pressed ? 14 : 0) + (p.id === b.receiver ? 6 : 0) });
+        }
+      }
+      if (!cands.length) return;
+      cands.sort((x, y) => y.score - x.score);
+      const p = cands[0].p;
+      if (b.y >= 1.65 && cands.length > 1) for (const c of cands) c.p.jumpT = 0.55;
+      if (cands.length > 1) this.emit('duel', { winner: p.id });
+      const c = this.ctrl[p.team], d = this.dir(p.team);
+      const humanActive = c.type === 'human' && c.active === p.id;
+      if (humanActive && p.headBuf > 0) { this.firstTime(p, 'header'); return; }
+      // an uncontested ball is brought down (chest/thigh); so is a gentle one at chest height
+      const opp = this.nearestOpp(p), contested = opp && hyp(opp.x - b.x, opp.z - b.z) < 2;
+      if ((!contested && b.y < 2.3) || (b.y < 1.65 && (humanActive || hyp(b.vx, b.vz) < 9))) { p.jumpT = 0; this.onPossession(p); return; }
+      const distGoal = hyp(d * HL - b.x, b.z);
+      if (distGoal < 17 && Math.abs(b.z) < 12) {
+        p.face = Math.atan2(d * HL - p.x, -p.z);
+        this.shoot(p, rand(0.4, 0.9), null, c.diff.shotErr, { header: true });
+        return;
+      }
+      if (d * (b.x - (-d * HL)) < 35) {   // defending: clear it with the head
+        this.kickBall(p, d * rand(13, 17), rand(2.5, 4), rand(-5, 5), -1);
+        this.emit('header', { by: p.id });
+        return;
+      }
+      const best = this.bestPass(p, 0, 0, true);
+      if (best) this.headedPass(p, best.q); else this.kickBall(p, d * 8, 3, rand(-3, 3), -1);
+    }
+
+    headedPass(p, q) {
+      const b = this.ball, dist = hyp(q.x - b.x, q.z - b.z), T = clamp(dist / 12, 0.5, 1.4);
+      this.kickBall(p, (q.x - b.x) / T, (0.5 - b.y) / T + 0.5 * G * T, (q.z - b.z) / T, q.id);
+      this.emit('header', { by: p.id });
+    }
+
+    // Human first-time play: header, volley or one-touch pass in the held direction.
+    firstTime(p, kind) {
+      const b = this.ball, d = this.dir(p.team);
+      const act = p.headAct, dir = p.headDir || { x: d, z: 0 };
+      p.headBuf = 0; p.jumpT = kind === 'header' ? 0.55 : 0;
+      const distGoal = hyp(d * HL - b.x, b.z);
+      if (act === 'shoot' && distGoal < 30) {
+        const aim = Math.abs(dir.z) > 0.3 ? Math.sign(dir.z) * 2.8 : null;
+        this.shoot(p, p.headPower != null ? p.headPower : 0.7, aim, HUMAN.shotErr * 1.3, { header: kind === 'header' });
+        return;
+      }
+      const best = this.bestPass(p, dir.x, dir.z, false);
+      if (best) {
+        if (kind === 'header') this.headedPass(p, best.q); else this.passTo(p, best.q, act === 'through', HUMAN.passErr * 1.5);
+        this.ctrl[p.team].active = best.q.id;
+      } else this.passInto(p, dir.x, dir.z, act === 'through');
     }
 
     goalkeepers(dt) {
@@ -566,7 +777,7 @@ var FC = window.FC = window.FC || {};
         if (b.shot && b.shot.team !== t && !b.shot.saved && reachH < 1.3 + (gk.dive ? 1.0 : 0) && b.y < 2.6) {
           b.shot.saved = true;
           const sp = hyp(b.vx, b.vz);
-          const chance = clamp(1.0 - (sp - 18) * 0.03 - Math.max(0, reachH - 0.8) * 0.2 + (gk.rating - 80) * 0.01 + (diff.gk || 0), 0.15, 0.96);
+          const chance = clamp(0.93 - (sp - 18) * 0.035 - Math.max(0, reachH - 0.8) * 0.25 + (gk.rating - 80) * 0.01 + (diff.gk || 0), 0.15, 0.96);
           if (Math.random() < chance) {
             if (sp < 19 && b.y < 2) { this.onPossession(gk); gk.holdT = 0; }
             else {
@@ -578,7 +789,7 @@ var FC = window.FC = window.FC || {};
           continue;
         }
         // loose ball in the box near the keeper: claim it
-        if (!b.shot && inBox && reachH < 1.3 && b.y < 2.3 && b.noPick !== gk.id) {
+        if (!b.shot && inBox && reachH < 1.3 && b.y < 2.6 && b.noPick !== gk.id) {
           this.onPossession(gk); gk.holdT = 0;
         }
       }
@@ -630,6 +841,9 @@ var FC = window.FC = window.FC || {};
         if (p.kickT > 0) p.kickT = Math.max(0, p.kickT - dt * 3.3);
         if (p.tackleCd > 0) p.tackleCd -= dt;
         if (p.stunT > 0) p.stunT -= dt;
+        if (p.headBuf > 0) p.headBuf -= dt;
+        if (p.jumpT > 0) p.jumpT = Math.max(0, p.jumpT - dt);
+        if (p.shieldT > 0) p.shieldT -= dt;
         const c = this.ctrl[p.team];
         const d = this.dir(p.team);
         let tx = p.x, tz = p.z, sprint = false, mx = 0, mz = 0, manual = false;
@@ -653,8 +867,9 @@ var FC = window.FC = window.FC || {};
           ({ tx, tz, sprint } = this.aiTarget(p, pt, chasers, dt));
         }
 
+        p.shield = b.owner === p.id && (isActive ? c.input.shield : p.shieldT > 0);
         let speed = (sprint ? 7.8 : 5.6) * this.rf(p) * (c.type === 'ai' ? c.diff.speed : 1);
-        if (b.owner === p.id) speed *= 0.9;
+        if (b.owner === p.id) speed *= p.shield ? 0.45 : 0.9;
         if (p.stunT > 0) speed *= 0.35;
         if (this.phase === 'kickoff' || this.phase === 'setpiece') { if (p.id === this.setpiece.taker) speed = 0; }
 
@@ -798,15 +1013,17 @@ var FC = window.FC = window.FC || {};
       p.vx += (mx / n * run - p.vx) * Math.min(1, dt * 6);
       p.vz += (mz / n * run - p.vz) * Math.min(1, dt * 6);
 
+      if (p.shieldT > 0) { p.vx *= 0.5; p.vz *= 0.5; }
       p.decideT -= dt;
       if (p.decideT > 0) return;
+      if (hyp(b.x - p.x, b.z - p.z) > 1.4) { p.decideT = 0.05; return; }
       p.decideT = Math.max(0.3, diff.react * 1.6) * rand(0.7, 1.3);
 
       const angleOk = Math.abs(p.z) < 18;
       const blocked = near && nd < 2.2 && (near.x - p.x) * d > 0;
       const shootP = distGoal < 14 ? 0.8 : distGoal < 20 ? 0.35 : distGoal < 27 ? 0.12 : 0;
       if (angleOk && Math.random() < shootP * (blocked ? 0.4 : 1)) {
-        this.shoot(p, clamp(0.45 + distGoal / 50 + rand(-0.1, 0.15), 0.4, 0.9), null, diff.shotErr);
+        this.shoot(p, clamp(0.45 + distGoal / 50 + rand(-0.1, 0.15), 0.4, 0.9), null, diff.shotErr, { curl: distGoal > 16 && Math.random() < 0.35 ? rand(0.4, 1) : 0 });
         return;
       }
       const pressured = nd < 2.6;
@@ -819,6 +1036,7 @@ var FC = window.FC = window.FC || {};
           return;
         }
       }
+      if (pressured && nd < 1.8 && Math.random() < 0.3) p.shieldT = 0.8;
       if (pressured && nd < 2 && Math.random() < 0.3 && hyp(p.x - (-d * HL), p.z) < 30) {
         // under pressure near our own goal: clear it upfield
         this.passInto(p, d, rand(-0.6, 0.6), true);
@@ -830,7 +1048,7 @@ var FC = window.FC = window.FC || {};
       const b = this.ball;
       return {
         ball: { x: b.x, y: b.y, z: b.z, vx: b.vx, vz: b.vz },
-        players: this.players.map(p => ({ x: p.x, z: p.z, face: p.face, spd: hyp(p.vx, p.vz), kick: p.kickT, dive: p.dive })),
+        players: this.players.map(p => ({ x: p.x, z: p.z, face: p.face, spd: hyp(p.vx, p.vz), kick: p.kickT, dive: p.dive, jump: p.jumpT, shield: p.shield ? 1 : 0 })),
         active: [this.ctrl[0].type === 'human' ? this.ctrl[0].active : -1, this.ctrl[1].type === 'human' ? this.ctrl[1].active : -1],
         owner: b.owner,
       };

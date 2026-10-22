@@ -147,7 +147,7 @@ var FC = window.FC = window.FC || {};
           if (m.v !== PROTOCOL) { send({ t: 'reject', reason: 'version' }); return; }
           N.oppTeam = validTeam(m.team); N.state = 'lobby'; sendLobby(); render(); break;
         case 'team': N.oppTeam = validTeam(m.team); sendLobby(); render(); break;
-        case 'in': if (N.inMatch && FC.state.match) FC.state.match.setInput(1, num(m.x), num(m.z), !!m.sp); break;
+        case 'in': if (N.inMatch && FC.state.match) FC.state.match.setInput(1, num(m.x), num(m.z), !!m.sp, !!m.sh); break;
         case 'act':
           if (N.inMatch && FC.state.match && ['pass', 'through', 'shoot', 'switch'].includes(m.a))
             FC.state.match.queueAction(1, { a: m.a, power: clamp01(m.power), x: num(m.x), z: num(m.z) });
@@ -255,12 +255,12 @@ var FC = window.FC = window.FC || {};
       if (keep.length) send({ t: 'ev', evs: keep });
       if (evs.some(e => e.e === 'full')) N.inMatch = false;
     },
-    guestTick(dt, x, z, sprint) {
+    guestTick(dt, x, z, sprint, shield) {
       if (!N.conn) return;
       heartbeat(dt);
       N.inT -= dt;
-      const key = `${x.toFixed(2)},${z.toFixed(2)},${sprint ? 1 : 0}`;
-      if (key !== N.lastIn || N.inT <= 0) { N.inT = 0.1; N.lastIn = key; send({ t: 'in', x: r2(x), z: r2(z), sp: sprint ? 1 : 0 }); }
+      const key = `${x.toFixed(2)},${z.toFixed(2)},${sprint ? 1 : 0},${shield ? 1 : 0}`;
+      if (key !== N.lastIn || N.inT <= 0) { N.inT = 0.1; N.lastIn = key; send({ t: 'in', x: r2(x), z: r2(z), sp: sprint ? 1 : 0, sh: shield ? 1 : 0 }); }
       const s = interpolated();
       if (s) FC.setGuestState(s.view, s.hud);
     },
