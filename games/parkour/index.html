@@ -218,6 +218,12 @@
       name: 'Sky Tower', tip: 'Climb the spiral. Brown platforms crumble, so keep moving!',
       plats: spiral(),
     },
+    {
+      name: 'Stepping Stones', sky: 0xf0dcc4, tip: 'Easy hops and gentle steps to get your legs going.',
+      plats: course().go(2.5).go(2.5).zig(4, 2.2, 0, 30, 3).check()
+        .stairs(4, 2, 0.6, 3).go(2.5, 0, { s: 2.5 }).check()
+        .zig(4, 2.5, 0.4, 35, 2.5).finish(),
+    },
   ];
 
   // ---------- storage ----------
