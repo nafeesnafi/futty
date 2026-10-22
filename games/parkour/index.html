@@ -260,6 +260,10 @@
         .go(2.5, 0, { m: { axis: 'y', amp: 2, speed: 0.9 } }).go(2.5, 2).go(2.5, 0, { m: { axis: 'y', amp: 2, speed: 1 } }).go(2.5, 2).check()
         .go(2.5, 0, { m: { axis: 'y', amp: 2.2, speed: 1, phase: 1 } }).finish(3, 2),
     },
+    {
+      name: 'Little Spiral', sky: 0xe8d3b0, tip: 'A short climb around and around.',
+      plats: course().go(2.5).spiral(14, 6, 0.9, 2.2, 2.6, 1, i => i === 6 ? 'check' : null).finish(2.5, 0.4),
+    },
   ];
 
   // ---------- storage ----------

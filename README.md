@@ -60,6 +60,7 @@ level as fast as you can:
 8. **Balance Beam**: long narrow beams. Walk, don't sprint, if you wobble
 9. **Corner Turns**: the path snakes left and right. Swing the camera around each corner
 10. **Lift Off**: blue platforms going up and down work like lifts. Ride them up
+11. **Little Spiral**: a short climb around and around
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 
