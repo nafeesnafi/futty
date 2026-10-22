@@ -485,6 +485,12 @@
         .stairs(4, 2.8, 1.2, 1.8).turn(90).beam(10, 0.8, 2.8).go(3, 1.2, { s: 1.8 }).check(2.8, 0.5)
         .turn(90).stairs(4, 3, 1.2, 1.6, { type: 'crumble' }).finish(3, 0.5),
     },
+    {
+      name: 'Freefall', sky: 0xdcd8cc, tip: 'Bounce high, then drop a long way onto small targets.',
+      plats: course().pad(2.5).pad(3, 4.5).go(3.5, 5).go(5, -6, { s: 2.6 }).check(2.5)
+        .pad(2.5).pad(3, 4.5).go(3.5, 5, { s: 2.4 }).go(5.5, -6, { s: 2.2 }).check(2.5)
+        .pad(2.5).pad(3, 4.5, { s: 2.6 }).go(3.5, 5, { s: 2 }).go(5.5, -5, { s: 2 }).finish(3),
+    },
   ];
 
   // ---------- storage ----------
