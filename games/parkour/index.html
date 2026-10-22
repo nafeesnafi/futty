@@ -236,6 +236,12 @@
         .crumbles(4, 2.4, 0.3, 2.8).check()
         .go(2.5, 0.5).crumbles(5, 2.5, 0, 2.6).finish(),
     },
+    {
+      name: 'Bounce House', sky: 0xedc98f, tip: 'Red pads launch you high. Steer while you fly.',
+      plats: course().go(2.5).pad(2.5).go(3, 4.5).go(2.5).check()
+        .pad(2.5).go(3, 4.5).pad(2.5).go(3, 4.5).check()
+        .go(2.5).pad(2.5, -1).go(3.5, 5).finish(),
+    },
   ];
 
   // ---------- storage ----------
