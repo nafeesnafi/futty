@@ -461,6 +461,12 @@
         .turn(90).go(2.6, 0, { m: { axis: 'y', amp: 2.8, speed: 1.4 } }).go(2.6, 2.6, { s: 2.2 }).pad(2.6).go(3.5, 4.5, { s: 2.2 }).check()
         .turn(-90).spiral(8, 4, 1.1, 2.4, 2, 1).finish(2.5, 0.5),
     },
+    {
+      name: 'Star Steps', sky: 0x6e6478, tip: 'Small glowing steps in the dark sky.',
+      plats: course().zig(6, 3, 0.6, 40, 1.6).check()
+        .zig(6, 3.2, 0.6, 45, 1.5).check()
+        .zig(6, 3.4, 0.4, 45, 1.4, { type: 'crumble' }).finish(3.5),
+    },
   ];
 
   // ---------- storage ----------
