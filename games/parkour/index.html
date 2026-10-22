@@ -242,6 +242,12 @@
         .pad(2.5).go(3, 4.5).pad(2.5).go(3, 4.5).check()
         .go(2.5).pad(2.5, -1).go(3.5, 5).finish(),
     },
+    {
+      name: 'Balance Beam', sky: 0xedc98f, tip: 'Long narrow beams. Walk, don\'t sprint, if you wobble.',
+      plats: course().beam(8, 1.4, 2.5).go(2.5).beam(10, 1.2, 2.5).check()
+        .turn(90).beam(10, 1, 2.5).go(2.5, 0.6).beam(12, 1, 2.5).check()
+        .turn(-90).beam(8, 0.9, 2.5, 0.6).finish(),
+    },
   ];
 
   // ---------- storage ----------
