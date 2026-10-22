@@ -270,6 +270,12 @@
         .crumbles(3, 2.4, 0, 2.6).pad(2.5).go(3, 4.5).check()
         .beam(10, 1, 2.5).turn(90).go(2.5).go(2.5, 0.6).finish(),
     },
+    {
+      name: 'Long Jumps', sky: 0xf0dcc4, tip: 'Wider gaps. Hold Shift (or push the stick all the way) to sprint before you jump.',
+      plats: course().go(3.2).go(3.4).go(3.6).check()
+        .go(3.8, 0, { s: 3.5 }).go(4, 0, { s: 3.5 }).go(3.5, 0.5).check()
+        .go(4, 0, { s: 3 }).go(4.2, 0, { s: 3 }).finish(4),
+    },
   ];
 
   // ---------- storage ----------

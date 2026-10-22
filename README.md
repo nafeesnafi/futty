@@ -62,6 +62,7 @@ level as fast as you can:
 10. **Lift Off**: blue platforms going up and down work like lifts. Ride them up
 11. **Little Spiral**: a short climb around and around
 12. **Mixed Bag**: a bit of everything you've learned so far
+13. **Long Jumps**: wider gaps. Hold Shift (or push the stick all the way) to sprint before you jump
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 
