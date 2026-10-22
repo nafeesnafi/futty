@@ -230,16 +230,29 @@ var FC = window.FC = window.FC || {};
         case 'full': if (S.role === 'demo') { startDemo(); } else { FC.Audio.whistle('full'); endMatch(); } break;
         case 'restart': {
           if (S.role === 'demo') break;
-          const names = { throw: 'Throw-in', corner: 'Corner', goalkick: 'Goal kick' };
+          const names = { throw: 'Throw-in', corner: 'Corner', goalkick: 'Goal kick', freekick: 'Free kick', ifk: 'Indirect free kick', penalty: 'Penalty' };
           const mine = e.team === S.myTeam;
           const t = FC.TEAMS[e.team === 0 ? S.cfg.home : S.cfg.away];
+          if (e.type === 'penalty') banner('PENALTY!', t.name, 2200);
           hint(mine ? `Your ${names[e.type].toLowerCase()}: aim and press Pass (J)` : `${names[e.type]} to ${t.name}`);
+          break;
+        }
+        case 'foul': if (S.role !== 'demo') FC.Audio.whistle(false); break;
+        case 'offside': if (S.role !== 'demo') { FC.Audio.whistle(false); banner('OFFSIDE', `${teamOf(e.team).name} #${FC.NUMBERS[e.id % 11]}`, 1800); } break;
+        case 'card': {
+          if (S.role === 'demo') break;
+          const col = e.color === 'red' ? 'RED CARD' : 'YELLOW CARD';
+          banner(col, `${teamOf(e.team).name} #${FC.NUMBERS[e.id % 11]}${e.second ? ' · second yellow' : ''}${e.color === 'red' ? ' · sent off' : ''}`, 2600);
+          $('bnBig').style.color = e.color === 'red' ? '#ff4d4d' : '#ffd23f';
+          setTimeout(() => ($('bnBig').style.color = ''), 2700);
           break;
         }
       }
     }
   }
   FC.handleEvents = handleEvents;
+
+  function teamOf(t) { return FC.TEAMS[t === 0 ? S.cfg.home : S.cfg.away]; }
 
   function scoreLine() {
     const h = S.hud; if (!h || !S.cfg) return '';
@@ -263,6 +276,8 @@ var FC = window.FC = window.FC || {};
       [Math.round(st.poss[0] / poss * 100) + '%', 'Possession', Math.round(st.poss[1] / poss * 100) + '%'],
       [st.shots[0], 'Shots', st.shots[1]], [st.onTarget[0], 'On target', st.onTarget[1]],
       [st.passes[0], 'Passes', st.passes[1]], [st.corners[0], 'Corners', st.corners[1]],
+      [st.fouls[0], 'Fouls', st.fouls[1]], [st.offsides[0], 'Offsides', st.offsides[1]],
+      [st.yellows[0] + ' / ' + st.reds[0], 'Yellow / red', st.yellows[1] + ' / ' + st.reds[1]],
     ];
     $('ftStats').innerHTML = rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('');
     const btns = $('ftBtns'); btns.innerHTML = '';
@@ -309,6 +324,15 @@ var FC = window.FC = window.FC || {};
   function updateHud() {
     const h = S.hud; if (!h) return;
     $('sbScore').textContent = `${h.score[0]} - ${h.score[1]}`;
+    const reds = h.reds || [0, 0];
+    $('sbRedH').textContent = '▮'.repeat(reds[0]); $('sbRedA').textContent = '▮'.repeat(reds[1]);
+    // aiming a free kick / penalty
+    const sp = h.setpiece, aiming = sp && sp.interactive && sp.team === S.myTeam && h.phase === 'setpiece';
+    if (aiming && performance.now() - lastHint > 300) {
+      const curl = sp.curl === 0 ? 'none' : sp.curl > 0 ? 'bends right' : 'bends left';
+      hint(`Aim with the stick/WASD · Curl (Q): ${curl} · hold Shoot (K) for power${sp.type === 'penalty' ? '' : ' · Pass (J) to play it short'}`);
+      lastHint = performance.now();
+    }
     $('sbClock').textContent = h.phase === 'halftime' ? 'HT' : h.phase === 'fulltime' ? 'FT' : `${h.minute}'`;
     const charging = FC.Input.charging();
     $('power').classList.toggle('show', charging);
@@ -347,7 +371,10 @@ var FC = window.FC = window.FC || {};
       if (S.role === 'host' && FC.Net) FC.Net.hostTick(dt, S.view, S.hud, evs);
     }
     if (S.view) {
-      FC.Render.draw(Object.assign({}, S.view, { flip: S.myTeam === 1, active: S.role === 'demo' ? [-1, -1] : S.view.active }), dt);
+      const sp = S.hud && S.hud.setpiece;
+      const fk = sp && sp.interactive && sp.team === S.myTeam && S.hud.phase === 'setpiece' && S.role !== 'demo'
+        ? { gx: (sp.team === 0 ? 1 : -1) * FC.PITCH.HL, aimZ: sp.aim.z, aimY: sp.aim.y } : null;
+      FC.Render.draw(Object.assign({}, S.view, { flip: S.myTeam === 1, fk, active: S.role === 'demo' ? [-1, -1] : S.view.active }), dt);
       if (S.role !== 'demo') { updateHud(); drawRadar(S.view); }
     }
     requestAnimationFrame(frame);

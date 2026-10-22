@@ -34,6 +34,8 @@
   }
   .sb-team { display: flex; align-items: center; gap: 8px; padding: 4px 12px; letter-spacing: .5px; }
   .sb-kit { width: 12px; height: 22px; border-radius: 2px; border: 1px solid rgba(255,255,255,.4); }
+  .sb-red { color: #ff4d4d; font-size: 16px; letter-spacing: 1px; }
+  .sb-red:empty { display: none; }
   .sb-score { background: var(--silver); color: var(--night); padding: 4px 12px; font-variant-numeric: tabular-nums; }
   .sb-clock { padding: 4px 12px; color: var(--gold); font-variant-numeric: tabular-nums; min-width: 56px; text-align: center; border-left: 1px solid var(--line); }
   #netStat { position: absolute; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); font-size: 13px; color: var(--muted); background: var(--panel); padding: 4px 10px; border-radius: 6px; }
@@ -151,9 +153,9 @@
 
 <div id="hud" class="hidden">
   <div class="scoreboard">
-    <div class="sb-team"><span class="sb-kit" id="sbKitH"></span><span id="sbH">HOM</span></div>
+    <div class="sb-team"><span class="sb-kit" id="sbKitH"></span><span id="sbH">HOM</span><span class="sb-red" id="sbRedH"></span></div>
     <div class="sb-score"><span id="sbScore">0 - 0</span></div>
-    <div class="sb-team"><span id="sbA">AWY</span><span class="sb-kit" id="sbKitA"></span></div>
+    <div class="sb-team"><span class="sb-red" id="sbRedA"></span><span id="sbA">AWY</span><span class="sb-kit" id="sbKitA"></span></div>
     <div class="sb-clock" id="sbClock">0'</div>
   </div>
   <div id="netStat" class="hidden"></div>
@@ -231,13 +233,14 @@
       <span><kbd>Shift</kbd></span><span>Sprint</span>
       <span><kbd>J</kbd> / <kbd>Z</kbd></span><span>Pass · tackle when defending</span>
       <span><kbd>L</kbd> / <kbd>C</kbd></span><span>Through ball</span>
-      <span><kbd>K</kbd> / <kbd>X</kbd> (hold)</span><span>Shoot (hold for power) · slide tackle when defending</span>
-      <span><kbd>Q</kbd> / <kbd>Space</kbd></span><span>Switch player</span>
+      <span><kbd>K</kbd> / <kbd>X</kbd> (hold)</span><span>Shoot (hold for power) · hold sideways to curl a finesse shot · slide tackle when defending</span>
+      <span><kbd>Q</kbd> / <kbd>Space</kbd></span><span>Switch player · hold on the ball to shield it · cycle curl at free kicks</span>
       <span><kbd>P</kbd> / <kbd>Esc</kbd></span><span>Pause</span>
       <span><kbd>M</kbd></span><span>Mute sound</span>
     </div>
     <p class="note">Gamepad: left stick move, A pass, B shoot, Y through ball, LB switch, RB/RT sprint, Start pause.<br>
-      Touch: stick on the left, buttons on the right. Pass and shoot in the direction you are holding. Hold sideways while shooting to aim at a post.</p>
+      Touch: stick on the left, buttons on the right. Pass and shoot in the direction you are holding. Hold sideways while shooting to curl it at a post.<br>
+      Press Shoot or Pass as a high ball or pass arrives to head it, volley it or play it first time. Free kicks near goal and penalties: aim the gold target, set curl with Switch, hold Shoot for power.</p>
     <button class="btn primary" id="controlsBack">Got it</button>
   </div>
 </section>

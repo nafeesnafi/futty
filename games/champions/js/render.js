@@ -10,7 +10,7 @@ var FC = window.FC = window.FC || {};
   let renderer, scene, camera, sun, ballMesh, ballShadow;
   const players = [];               // 22 player rigs (0-10 home, 11-21 away)
   const camPos = new THREE.Vector3(0, 30, 50), camLook = new THREE.Vector3();
-  let markers = [];
+  let markers = [], reticle = null;
   const flags = [];                 // supporter flags waved in the stands
   let flagTex = null, clockT = 0;
 
@@ -321,6 +321,10 @@ var FC = window.FC = window.FC || {};
       scene.add(sun);
       buildPitch(); buildGoal(1); buildGoal(-1); buildStadium(); buildBall();
       markers = [makeMarker(0x38bdf8), makeMarker(0xff5d5d)];
+      reticle = new THREE.Group();
+      const rmat = new THREE.MeshBasicMaterial({ color: 0xf0c35a, transparent: true, opacity: 0.95, depthTest: false });
+      reticle.add(new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.04, 8, 32), rmat), new THREE.Mesh(new THREE.CircleGeometry(0.06, 12), rmat));
+      reticle.rotation.y = Math.PI / 2; reticle.visible = false; reticle.renderOrder = 10; scene.add(reticle);
       addEventListener('resize', () => {
         renderer.setSize(container.clientWidth, container.clientHeight);
         camera.aspect = container.clientWidth / container.clientHeight; camera.updateProjectionMatrix();
@@ -369,10 +373,23 @@ var FC = window.FC = window.FC || {};
       for (let t = 0; t < 2; t++) {
         // blue ring = you, red ring = opponent (the away player online sees the view flipped)
         const m = markers[view.flip ? 1 - t : t], idx = view.active[t];
-        m.visible = idx >= 0;
+        m.visible = idx >= 0 && !view.fk;
         if (idx >= 0) { const s = view.players[idx]; m.position.set(s.x, 0, s.z); m.children[1].rotation.y += dt * 3; }
       }
 
+      // free kick / penalty you are taking: camera behind the ball, target over the goal
+      reticle.visible = !!view.fk;
+      if (view.fk) {
+        const k = view.fk, gx = k.gx, dist = Math.hypot(gx - b.x, b.z) || 1;
+        const ux = (gx - b.x) / dist, uz = -b.z / dist;
+        reticle.position.set(gx, k.aimY, k.aimZ);
+        reticle.rotation.y = gx > 0 ? -Math.PI / 2 : Math.PI / 2;
+        camPos.lerp(new THREE.Vector3(b.x - ux * 7, 2.6, b.z - uz * 7), Math.min(1, dt * 4));
+        camLook.lerp(new THREE.Vector3(gx, 1.3, k.aimZ * 0.4), Math.min(1, dt * 4));
+        camera.position.copy(camPos); camera.lookAt(camLook);
+        renderer.render(scene, camera);
+        return;
+      }
       // broadcast camera following the ball; flipped for the away player online
       const f = view.flip ? -1 : 1;
       const lookX = b.x * 0.92, lookZ = b.z * 0.55;
