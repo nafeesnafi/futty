@@ -285,6 +285,61 @@ var FC = window.FC = window.FC || {};
       this.emit('pass', { from: p.id, to: q.id });
     }
 
+    // Lofted ball. From a wide spot in the final third it's a whipped cross into the box (with spin
+    // bending it toward goal and an attacker making a run onto it); elsewhere a lob to a team-mate.
+    lobPass(p, dx, dz, errMul) {
+      const b = this.ball, d = this.dir(p.team), gx = d * HL;
+      const cross = Math.abs(b.z) > 11 && d * b.x > HL - 36;
+      let tx, tz, q = null;
+      if (cross) {
+        const runners = this.players.filter(m => m.team === p.team && m !== p && !m.off && m.idx >= 5 && d * m.x > HL - 30);
+        runners.sort((m, n) => hyp(m.x - (gx - d * 9), m.z) - hyp(n.x - (gx - d * 9), n.z));
+        q = runners[0] || null;
+        tx = gx - d * rand(6, 11); tz = -Math.sign(b.z) * rand(-1, 4);
+        if (q) q.plan = { x: tx, z: tz, t: 2.4 };
+      } else {
+        const best = this.bestPass(p, dx, dz, false);
+        if (best) { q = best.q; tx = q.x + q.vx * 0.8; tz = q.z + q.vz * 0.8; }
+        else { const n = hyp(dx, dz) || 1; tx = b.x + dx / n * 22; tz = b.z + dz / n * 22; }
+      }
+      tx = clamp(tx, -HL + 1, HL - 1); tz = clamp(tz, -HW + 1, HW - 1);
+      const dist = hyp(tx - b.x, tz - b.z) || 1;
+      const T = cross ? clamp(dist / 21, 0.8, 1.5) : clamp(dist / 15, 0.9, 2.3), speed = dist / T;
+      const arriveY = cross ? 1.7 : 0.6;
+      let ax = tx, az = tz, spin = null;
+      if (cross) {
+        // whip: spin bends it toward the goal line; aim outside so it curls back onto the target
+        const ux = (tx - b.x) / dist, uz = (tz - b.z) / dist, nz = -ux, mag = 8;
+        const sy = mag * Math.sign(nz * (-Math.sign(b.z) || 1));
+        const disp = 0.5 * MAGNUS * mag * speed * T * T * 0.86;
+        ax = tx - uz * disp * Math.sign(sy); az = tz + ux * disp * Math.sign(sy);
+        spin = { y: sy };
+      }
+      const err = (errMul || 0.05) * (1.4 - this.rf(p));
+      const ang = Math.atan2(az - b.z, ax - b.x) + rand(-err, err);
+      const vy = (arriveY - b.y) / T + 0.5 * G * T;
+      this.kickBall(p, Math.cos(ang) * speed, vy, Math.sin(ang) * speed, q ? q.id : -1, spin);
+      this.stats.passes[p.team]++;
+      this.emit('pass', { from: p.id, to: q ? q.id : -1, lob: true, cross });
+    }
+
+    // Fake shot: the shooting motion is cut short; nearby defenders (and the keeper) bite.
+    fakeShot(p) {
+      const d = this.dir(p.team);
+      p.kickT = 0.45; p.touchCd = 0.3;
+      for (let j = 0; j < 11; j++) {
+        const o = this.players[(1 - p.team) * 11 + j];
+        if (o.off) continue;
+        const dist = hyp(o.x - p.x, o.z - p.z);
+        if (j === 0 && dist < 25) { if (Math.random() < 0.5) o.dive = (Math.random() < 0.5 ? -1 : 1) * 1.1; continue; }
+        if (dist < 4.5 && Math.random() < 0.75) { o.stunT = 0.6; o.vx *= 0.3; o.vz *= 0.3; }
+      }
+      // body swerve: a burst sideways away from the closest defender
+      const o = this.nearestOpp(p), side = o && (o.z - p.z) * d > 0 ? -1 : 1;
+      p.vx += -Math.cos(p.face) * side * 3; p.vz += Math.sin(p.face) * side * 3;
+      this.emit('fake', { by: p.id });
+    }
+
     // kick into space in a direction (when no good receiver)
     passInto(p, dx, dz, through) {
       const n = hyp(dx, dz) || 1, sp = through ? 18 : 14;
@@ -548,9 +603,15 @@ var FC = window.FC = window.FC || {};
       if (inSetpiece && this.phase === 'kickoff' && hyp(a.x, a.z) < 0.2) { dx = -this.dir(t); dz = 0.3; }
       const near = hyp(b.x - p.x, b.z - p.z);
       if (b.owner === p.id && !inSetpiece && near > 1.4) { p.pending = { a, t: 0.6 }; return; }   // run onto the touch, then play it
+      if (b.owner === p.id && !inSetpiece) {
+        if (a.a === 'knock') { p.knock = true; p.touchCd = 0; return; }                 // double-tap sprint
+        if (a.a === 'fake') { this.fakeShot(p); return; }
+      }
+      if (a.a === 'knock' || a.a === 'fake') return;
       if (b.owner === p.id || inSetpiece) {
         if (inSetpiece) this.beginPlayFromSetpiece();
         p.pending = null;
+        if (a.a === 'lob') { this.lobPass(p, dx, dz, HUMAN.passErr); const r = this.ball.receiver; if (r >= 0) c.active = r; return; }
         if (a.a === 'shoot') {
           // hold a sideways direction to aim at a post and curl it into the corner (finesse)
           const lateral = Math.abs(a.z) > 0.3;
@@ -571,6 +632,7 @@ var FC = window.FC = window.FC || {};
         return;
       }
       // defending: pass key = tackle, shoot key = slide tackle
+      if (a.a === 'lob') return;
       if (a.a === 'pass' || a.a === 'through') this.tryTackle(p, false);
       else if (a.a === 'shoot') this.tryTackle(p, true);
     }
@@ -698,7 +760,7 @@ var FC = window.FC = window.FC || {};
       const ahead = rx * dx + rz * dz, side = Math.abs(rx * dz - rz * dx);
       if (p.touchCd <= 0 && (ahead < 0.65 || side > 0.7)) {
         const sprinting = spd > 6.4;
-        const push = p.knock ? 7 : sprinting ? 2.8 : 1.3;   // sprint touches are heavier; a knock-on goes ~5 m
+        const push = p.knock ? 8.5 : sprinting ? 2.8 : 1.3;   // sprint touches are heavier; a knock-on goes ~5 m
         if (ahead < 0.35 || side > 0.7) { b.x = p.x + dx * 0.45; b.z = p.z + dz * 0.45; }
         b.vx = dx * (spd + push); b.vz = dz * (spd + push); b.vy = 0; b.y = 0;
         p.touchCd = p.knock ? 0.6 : sprinting ? 0.35 : 0.25;
@@ -718,6 +780,16 @@ var FC = window.FC = window.FC || {};
       const b = this.ball;
       b.owner = -1; b.glued = false; b.receiver = -1;
       for (const p of this.players) p.pending = null;
+    }
+
+    // where a loose ball will be when it comes down to height h (for lobs and crosses), else a short lead
+    meetPoint(h = 1.4, lead = 0.3) {
+      const b = this.ball;
+      if (b.y > h || b.vy > 1) {
+        const disc = b.vy * b.vy + 2 * G * (b.y - h);
+        if (disc > 0) { const t = (b.vy + Math.sqrt(disc)) / G; return { x: b.x + b.vx * t, z: b.z + b.vz * t }; }
+      }
+      return { x: b.x + b.vx * lead, z: b.z + b.vz * lead };
     }
 
     nearestOpp(p) {
@@ -889,6 +961,7 @@ var FC = window.FC = window.FC || {};
         this.shoot(p, p.headPower != null ? p.headPower : 0.7, aim, HUMAN.shotErr * 1.3, { header: kind === 'header' });
         return;
       }
+      if (act === 'lob' && kind !== 'header') { this.lobPass(p, dir.x, dir.z, HUMAN.passErr * 1.5); return; }
       const best = this.bestPass(p, dir.x, dir.z, false);
       if (best) {
         if (kind === 'header') this.headedPass(p, best.q); else this.passTo(p, best.q, act === 'through', HUMAN.passErr * 1.5);
@@ -1017,7 +1090,7 @@ var FC = window.FC = window.FC || {};
           mx = c.input.x; mz = c.input.z; sprint = c.input.sprint;
           // assist: run onto passes aimed at you when you aren't steering
           if (!mx && !mz && b.receiver === p.id && b.owner < 0) {
-            const ax = b.x + b.vx * 0.25 - p.x, az = b.z + b.vz * 0.25 - p.z, n = hyp(ax, az);
+            const m = this.meetPoint(1.4, 0.25), ax = m.x - p.x, az = m.z - p.z, n = hyp(ax, az);
             if (n > 0.4) { mx = ax / n; mz = az / n; }
           }
         } else if (p.idx === 0) {
@@ -1027,6 +1100,7 @@ var FC = window.FC = window.FC || {};
         }
 
         p.shield = b.owner === p.id && (isActive ? c.input.shield : p.shieldT > 0);
+        p.pressing = !isActive && c.type === 'human' && c.input.shield && b.owner >= 0 && this.players[b.owner].team !== p.team && chasers[p.team][0] === p.id;
         let speed = (sprint ? 7.8 : 5.6) * this.rf(p) * (c.type === 'ai' ? c.diff.speed : 1);
         if (b.owner === p.id) speed *= p.shield ? 0.45 : 0.9;
         if (p.stunT > 0) speed *= 0.35;
@@ -1053,7 +1127,7 @@ var FC = window.FC = window.FC || {};
         // AI defenders tackle automatically
         if (!manual && !celebrate && this.phase === 'play' && b.owner >= 0 && this.players[b.owner].team !== p.team && p.tackleCd <= 0) {
           const dist = hyp(b.x - p.x, b.z - p.z);
-          const rate = c.type === 'ai' ? c.diff.press : 0.8;
+          const rate = c.type === 'ai' ? c.diff.press : (c.input.shield ? 1.6 : 0.8);
           if (dist < 1.5) {
             if (Math.random() < dt * 2.5 * rate) this.tryTackle(p, false);
             else p.tackleCd = 0.15;
@@ -1120,8 +1194,8 @@ var FC = window.FC = window.FC || {};
 
       // receiver of a pass: meet the ball
       if (b.receiver === p.id && b.owner < 0) {
-        const t = 0.35;
-        return { tx: b.x + b.vx * t, tz: b.z + b.vz * t, sprint: true };
+        const m = this.meetPoint(1.4, 0.35);
+        return { tx: m.x, tz: m.z, sprint: true };
       }
       // chase loose balls / press the carrier
       if (!setp) {
@@ -1136,6 +1210,7 @@ var FC = window.FC = window.FC || {};
         if (b.owner >= 0 && this.players[b.owner].team !== p.team) {
           if (ci === 0) {
             const o = this.players[b.owner];
+            if (c.type === 'human' && c.input.shield) return { tx: b.x, tz: b.z, sprint: true };   // second-man press
             // goal-side approach: sprint to close down, then jockey
             const gx = -d * HL, dist = hyp(o.x - p.x, o.z - p.z);
             if (dist < 4) return { tx: b.x, tz: b.z, sprint: true };
@@ -1212,6 +1287,7 @@ var FC = window.FC = window.FC || {};
         return;
       }
       const pressured = nd < 2.6;
+      if (Math.abs(p.z) > 14 && d * p.x > HL - 30 && Math.random() < 0.3) { this.lobPass(p, d, 0, diff.passErr); return; }
       const best = this.bestPass(p, 0, 0, true);
       if (best) {
         const gain = (best.q.x - p.x) * d;
@@ -1240,8 +1316,9 @@ var FC = window.FC = window.FC || {};
     }
 
     hud() {
+      const pressing = this.players.filter(p => p.pressing).map(p => p.id);
       return {
-        score: this.score.slice(), minute: this.minute, half: this.half, phase: this.phase,
+        score: this.score.slice(), minute: this.minute, half: this.half, phase: this.phase, pressing,
         setpiece: this.setpiece && (this.phase === 'setpiece' || this.phase === 'kickoff') ? {
           type: this.setpiece.type, team: this.setpiece.team, interactive: this.setpiece.interactive,
           aim: this.setpiece.aim, curl: this.setpiece.curl, bx: this.ball.x, bz: this.ball.z,
