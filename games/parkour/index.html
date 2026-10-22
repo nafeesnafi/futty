@@ -372,6 +372,12 @@
         .turn(90).go(4, 0, { m: { axis: 'fwd', amp: 2.5, speed: 1.1 } }).go(5.5, 0, { m: { axis: 'fwd', amp: 2.5, speed: 1.1, phase: Math.PI } }).go(4).check()
         .turn(-90).go(4.5, 0, { m: { axis: 'fwd', amp: 2.8, speed: 1.2 } }).finish(4),
     },
+    {
+      name: 'Rooftops', sky: 0xd9a98a, tip: 'Leap across rooftops of different heights.',
+      plats: course().go(3, 1, { s: 5 }).go(3.5, -1.5, { s: [4, 6] }).go(3, 1.2, { s: 4 }).go(3.5, -0.5, { s: [6, 4] }).check(3, 0.8)
+        .turn(90).go(3.5, 1.2, { s: 4 }).go(3.8, -2, { s: 5 }).go(3, 1.5, { s: 3.5 }).go(3.5, 0, { s: [3, 6] }).check(3.5, 1)
+        .go(4, -1, { s: 4 }).go(3, 1.5, { s: 3 }).finish(3.5, 0.5),
+    },
   ];
 
   // ---------- storage ----------
