@@ -91,6 +91,7 @@ level as fast as you can:
 39. **Up and Over**: bounce up, run across, drop down. Repeat until the flag
 40. **Twilight Run**: the sun is setting. A long course of everything mixed together
 41. **Pillar Hop**: tall pillars at different heights. Every jump is up or down
+42. **Rush Hour**: fast movers in both directions. Don't get left behind
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 

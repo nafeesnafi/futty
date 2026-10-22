@@ -443,6 +443,12 @@
         .zig(5, 2.8, 0.8, 35, 1.8, { h: 8 }).check(2.6, 0.5)
         .go(3.5, -2, { s: 1.6, h: 8 }).go(2.6, 1.3, { s: 1.6, h: 8 }).go(2.6, 1.3, { s: 1.6, h: 8 }).finish(3, 0.5),
     },
+    {
+      name: 'Rush Hour', sky: 0x9c8aa0, tip: 'Fast movers in both directions. Don\'t get left behind.',
+      plats: course().go(2.5).movers(4, 'side', 4, 2, 2.6, 2.4).check()
+        .turn(90).movers(4, 'side', 3.5, 2.2, 2.6, 2.2).check()
+        .turn(-90).go(3.5, 0, { m: { axis: 'fwd', amp: 1.5, speed: 2 } }).movers(3, 'side', 4.5, 2.3, 2.8, 2.2).finish(),
+    },
   ];
 
   // ---------- storage ----------
