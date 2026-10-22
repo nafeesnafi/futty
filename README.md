@@ -58,6 +58,7 @@ level as fast as you can:
 6. **Crumble Path**: brown platforms fall away shortly after you land. Keep moving
 7. **Bounce House**: red pads launch you high. Steer while you fly
 8. **Balance Beam**: long narrow beams. Walk, don't sprint, if you wobble
+9. **Corner Turns**: the path snakes left and right. Swing the camera around each corner
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 

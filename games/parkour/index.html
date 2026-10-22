@@ -248,6 +248,12 @@
         .turn(90).beam(10, 1, 2.5).go(2.5, 0.6).beam(12, 1, 2.5).check()
         .turn(-90).beam(8, 0.9, 2.5, 0.6).finish(),
     },
+    {
+      name: 'Corner Turns', sky: 0xe6c2b4, tip: 'The path snakes left and right. Swing the camera around each corner.',
+      plats: course().go(2.5).go(2.5).turn(90).go(2.5).go(2.5, 0.6).turn(-90).go(2.5).check()
+        .turn(-90).go(2.5).go(2.5, 0.6).turn(90).go(2.5).turn(90).go(2.5).check()
+        .turn(-90).go(2.8).turn(-90).go(2.8, 0.6).turn(90).finish(),
+    },
   ];
 
   // ---------- storage ----------
