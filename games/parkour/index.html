@@ -467,6 +467,12 @@
         .zig(6, 3.2, 0.6, 45, 1.5).check()
         .zig(6, 3.4, 0.4, 45, 1.4, { type: 'crumble' }).finish(3.5),
     },
+    {
+      name: 'Midnight Express', sky: 0x6e6478, tip: 'A long fast course in the dark. Sprint on every gap.',
+      plats: course().beam(12, 1.2, 4).go(4.4, 0, { s: 2.6 }).beam(12, 1, 4.4).check(4.4)
+        .turn(90).go(4.5, 0, { s: 2.6, m: { axis: 'side', amp: 3, speed: 1.6 } }).beam(12, 0.9, 4.4).check(4.4)
+        .turn(-90).crumbles(4, 4.2, 0, 2.4).beam(12, 0.8, 4.4).finish(4.4),
+    },
   ];
 
   // ---------- storage ----------

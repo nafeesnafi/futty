@@ -95,6 +95,7 @@ level as fast as you can:
 43. **Crumbling Bridge**: a long bridge falling apart under your feet. Do not stop
 44. **Moonrise**: night falls. Climb toward the moon on lifts and pads
 45. **Star Steps**: small glowing steps in the dark sky
+46. **Midnight Express**: a long fast course in the dark. Sprint on every gap
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 
