@@ -10,7 +10,7 @@ var FC = window.FC = window.FC || {};
   let renderer, scene, camera, sun, ballMesh, ballShadow;
   const players = [];               // 22 player rigs (0-10 home, 11-21 away)
   const camPos = new THREE.Vector3(0, 30, 50), camLook = new THREE.Vector3();
-  let markers = [], reticle = null;
+  let markers = [], reticle = null, shake = 0, orbitT = 0;
   const flags = [];                 // supporter flags waved in the stands
   let flagTex = null, clockT = 0;
 
@@ -119,21 +119,88 @@ var FC = window.FC = window.FC || {};
     }
     const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, GOAL_W, 10), white);
     bar.rotation.x = Math.PI / 2; bar.position.set(0, GOAL_H, 0); bar.castShadow = true; g.add(bar);
-    // net: grid lines on back, roof and sides
-    const pts = [], D = GOAL_D, step = 0.25;
-    const back = (y, z) => [D, y * 0.92, z];
-    for (let z = -GOAL_W / 2; z <= GOAL_W / 2 + 1e-6; z += step) { pts.push(...[0, GOAL_H, z], ...back(GOAL_H, z), ...back(GOAL_H, z), ...back(0, z)); }
-    for (let y = 0; y <= GOAL_H + 1e-6; y += step) { pts.push(...back(y, -GOAL_W / 2), ...back(y, GOAL_W / 2)); }
-    for (let x = 0; x <= D + 1e-6; x += step) { pts.push(x, GOAL_H - (GOAL_H * 0.08) * x / D, -GOAL_W / 2, x, GOAL_H - (GOAL_H * 0.08) * x / D, GOAL_W / 2); }
-    for (const z of [-GOAL_W / 2, GOAL_W / 2]) {
-      for (let y = 0; y <= GOAL_H + 1e-6; y += step) pts.push(0, y, z, D, y * 0.92, z);
-      for (let x = 0; x <= D + 1e-6; x += step) pts.push(x, 0, z, x, GOAL_H - (GOAL_H * 0.08) * x / D, z);
-    }
-    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-    g.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: .45 })));
     g.position.x = side * HL;
     if (side < 0) g.rotation.y = Math.PI;
+    g.add(buildNet(side));
     scene.add(g);
+  }
+
+  // The net is a grid of spring nodes (back, roof, two sides). The ball pushes nearby nodes along
+  // its velocity; each node springs back to rest with damping, so shots bulge and ripple the net.
+  const nets = [];
+  function buildNet(side) {
+    const D = GOAL_D, W = GOAL_W, H = GOAL_H, nodes = [], idx = [];
+    const roofY = x => H - H * 0.08 * x / D;
+    function panel(nu, nv, at) {
+      const base = nodes.length;
+      for (let v = 0; v < nv; v++) for (let u = 0; u < nu; u++) {
+        const [x, y, z] = at(u / (nu - 1), v / (nv - 1));
+        nodes.push({ rx: x, ry: y, rz: z, dx: 0, dy: 0, dz: 0, vx: 0, vy: 0, vz: 0, pin: u === 0 || v === 0 || u === nu - 1 || v === nv - 1 });
+        const i = base + v * nu + u;
+        if (u > 0) idx.push(i - 1, i);
+        if (v > 0) idx.push(i - nu, i);
+      }
+    }
+    const cols = Math.round(W / 0.25) + 1;
+    panel(cols, 11, (u, v) => [D, v * roofY(D), -W / 2 + u * W]);              // back
+    panel(cols, 9, (u, v) => [v * D, roofY(v * D), -W / 2 + u * W]);           // roof
+    for (const sz of [-W / 2, W / 2]) panel(9, 11, (u, v) => [u * D, v * roofY(u * D), sz]);   // sides
+    const pos = new Float32Array(nodes.length * 3);
+    nodes.forEach((n, i) => { pos[i * 3] = n.rx; pos[i * 3 + 1] = n.ry; pos[i * 3 + 2] = n.rz; });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setIndex(idx);
+    const mesh = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: .5 }));
+    mesh.frustumCulled = false;
+    nets.push({ side, nodes, geo, energy: 0 });
+    return mesh;
+  }
+
+  function updateNets(ball, dt) {
+    for (const net of nets) {
+      const s = net.side, lx = (ball.x - s * HL) * s, lz = ball.z * s, ly = ball.y + 0.11;
+      const bvx = (ball.vx || 0) * s, bvz = (ball.vz || 0) * s, bvy = ball.vy || 0;
+      const near = lx > -0.5 && lx < GOAL_D + 0.6 && Math.abs(lz) < GOAL_W / 2 + 0.6 && ly < GOAL_H + 0.6;
+      if (!near && net.energy < 1e-3) continue;
+      let energy = 0;
+      const pos = net.geo.attributes.position.array;
+      net.nodes.forEach((n, i) => {
+        if (n.pin) return;
+        if (near) {
+          const ex = n.rx + n.dx - lx, ey = n.ry + n.dy - ly, ez = n.rz + n.dz - lz, dist = Math.hypot(ex, ey, ez);
+          if (dist < 0.8) {
+            const f = (1 - dist / 0.8) * 0.9;
+            n.vx += bvx * f; n.vy += bvy * f * 0.5; n.vz += bvz * f;
+          }
+        }
+        // spring back to rest, with damping
+        n.vx += (-70 * n.dx - 7 * n.vx) * dt; n.vy += (-70 * n.dy - 7 * n.vy) * dt; n.vz += (-70 * n.dz - 7 * n.vz) * dt;
+        n.dx = Math.max(-0.9, Math.min(0.9, n.dx + n.vx * dt));
+        n.dy = Math.max(-0.9, Math.min(0.9, n.dy + n.vy * dt));
+        n.dz = Math.max(-0.9, Math.min(0.9, n.dz + n.vz * dt));
+        energy += Math.abs(n.vx) + Math.abs(n.dx) + Math.abs(n.vz) + Math.abs(n.dz);
+        pos[i * 3] = n.rx + n.dx; pos[i * 3 + 1] = n.ry + n.dy; pos[i * 3 + 2] = n.rz + n.dz;
+      });
+      net.energy = energy;
+      net.geo.attributes.position.needsUpdate = true;
+    }
+  }
+
+  // ---------- turf skid marks from slide tackles ----------
+  const skids = [];
+  function addSkid(x, z, face) {
+    let m;
+    if (skids.length >= 40) m = skids.shift().mesh;
+    else {
+      m = new THREE.Mesh(new THREE.PlaneGeometry(0.45, 2.4), new THREE.MeshBasicMaterial({ color: 0x5a4a2a, transparent: true, opacity: 0.55, depthWrite: false }));
+      m.rotation.order = 'YXZ'; scene.add(m);
+    }
+    m.position.set(x - Math.sin(face) * 0.6, 0.015, z - Math.cos(face) * 0.6);
+    m.rotation.set(-Math.PI / 2, face, 0);
+    skids.push({ mesh: m, life: 45 });
+  }
+  function fadeSkids(dt) {
+    for (const k of skids) { k.life -= dt; k.mesh.material.opacity = Math.max(0.06, Math.min(0.55, k.life / 45 * 0.55)); }
   }
 
   function buildStadium() {
@@ -341,8 +408,18 @@ var FC = window.FC = window.FC || {};
     },
 
     // view = { ball:{x,y,z,vx,vz}, players:[{x,z,face,spd,kick}], active:[homeIdx|-1, awayIdx|-1], flip }
+    // match events that drive effects (also arrive on the guest's screen online)
+    onEvent(e, view) {
+      if (e.e === 'post') shake = Math.max(shake, 0.6);
+      else if (e.e === 'goal') shake = Math.max(shake, 0.3);
+      else if (e.e === 'save') shake = Math.max(shake, 0.15);
+      else if (e.e === 'slide' && view && view.players[e.by]) { const q = view.players[e.by]; addSkid(q.x, q.z, q.face); }
+    },
+
     draw(view, dt) {
       waveFlags(dt);
+      fadeSkids(dt);
+      updateNets(view.ball, dt);
       const b = view.ball;
       ballMesh.position.set(b.x, b.y + 0.11, b.z);
       const sp = Math.hypot(b.vx || 0, b.vz || 0);
@@ -357,18 +434,48 @@ var FC = window.FC = window.FC || {};
         const p = players[i]; if (!p) return;
         p.root.position.set(s.x, 0, s.z);
         p.root.rotation.y = s.face;
-        // running animation
+        // turning rate drives the lean into corners
+        let dFace = s.face - (p.prevFace == null ? s.face : p.prevFace); dFace = Math.atan2(Math.sin(dFace), Math.cos(dFace));
+        p.prevFace = s.face;
         const spd = s.spd || 0;
+        const leanTarget = Math.max(-0.35, Math.min(0.35, -dFace / Math.max(dt, 1e-3) * spd * 0.012));
+        p.lean = (p.lean || 0) + (leanTarget - (p.lean || 0)) * Math.min(1, dt * 8);
+        // running cycle
         p.phase += dt * (2.2 + spd * 1.5);
         const amp = Math.min(0.9, spd * 0.12);
         p.legs[0].rotation.x = Math.sin(p.phase) * amp;
         p.legs[1].rotation.x = -Math.sin(p.phase) * amp;
         p.arms[0].rotation.x = -Math.sin(p.phase) * amp * 0.8;
         p.arms[1].rotation.x = Math.sin(p.phase) * amp * 0.8;
+        p.arms[0].rotation.z = 0; p.arms[1].rotation.z = 0;
         p.body.position.y = Math.abs(Math.sin(p.phase)) * amp * 0.06;
+        p.body.position.z = 0;
         p.body.rotation.x = Math.min(0.25, spd * 0.03);
+        p.body.rotation.z = p.lean;
         if (s.kick > 0) { p.legs[1].rotation.x = -1.1 * Math.sin(Math.PI * (1 - s.kick)); }
-        if (s.dive) { p.body.rotation.z = s.dive; p.body.position.y = 0.2; } else p.body.rotation.z = 0;
+        if (s.slide > 0) {
+          // sliding tackle: on the hip, leading leg out, arm trailing
+          const k = Math.min(1, s.slide / 0.25);
+          p.body.rotation.x = -1.15 * k; p.body.position.y = -0.45 * k; p.body.position.z = 0.2 * k;
+          p.legs[1].rotation.x = -1.5 * k; p.legs[0].rotation.x = -0.6 * k;
+          p.arms[0].rotation.z = 0.9 * k; p.arms[1].rotation.x = 0.8 * k;
+        } else if (s.dive) {
+          // goalkeeper dive: body laid out sideways and lifted, both arms reaching
+          const k = Math.min(1, Math.abs(s.dive) / 1.1);
+          p.body.rotation.z = s.dive; p.body.position.y = 0.25 + 0.35 * Math.sin(k * Math.PI / 2);
+          p.arms[0].rotation.z = -2.7 * k * Math.sign(s.dive) + 0.3; p.arms[1].rotation.z = -2.7 * k * Math.sign(s.dive) - 0.3;
+          p.arms[0].rotation.x = 0; p.arms[1].rotation.x = 0;
+        } else if (s.jump > 0) {
+          // jumping for a header: rise and fall over ~0.55 s with arms up for balance
+          const t = 1 - s.jump / 0.55, h = Math.sin(Math.PI * Math.max(0, Math.min(1, t)));
+          p.body.position.y = 0.55 * h; p.body.rotation.x = -0.25 * h;
+          p.arms[0].rotation.z = 2.2 * h; p.arms[1].rotation.z = -2.2 * h;
+          p.legs[0].rotation.x = 0.5 * h; p.legs[1].rotation.x = 0.2 * h;
+        } else if (s.shield) {
+          // shielding: low stance, leaning back into the defender, arms out
+          p.body.rotation.x = -0.2; p.body.position.y = -0.05;
+          p.arms[0].rotation.z = 0.9; p.arms[1].rotation.z = -0.9;
+        }
       });
       for (let t = 0; t < 2; t++) {
         // blue ring = you, red ring = opponent (the away player online sees the view flipped)
@@ -390,16 +497,31 @@ var FC = window.FC = window.FC || {};
         renderer.render(scene, camera);
         return;
       }
-      // broadcast camera following the ball; flipped for the away player online
       const f = view.flip ? -1 : 1;
-      const lookX = b.x * 0.92, lookZ = b.z * 0.55;
-      const want = new THREE.Vector3(lookX, 15, f * 30 + b.z * 0.55);
-      camPos.lerp(want, Math.min(1, dt * 2.5));
-      camLook.lerp(new THREE.Vector3(lookX, 0, lookZ - f * 1), Math.min(1, dt * 3));
+      if (view.celebrate) {
+        // goal celebration: slow orbit around the scorer
+        const c = view.celebrate; orbitT += dt * 0.45;
+        const want = new THREE.Vector3(c.x + Math.sin(orbitT) * 9, 3.2, c.z + f * Math.cos(orbitT) * 9);
+        camPos.lerp(want, Math.min(1, dt * 2)); camLook.lerp(new THREE.Vector3(c.x, 1.1, c.z), Math.min(1, dt * 3));
+      } else {
+        orbitT = 0;
+        // broadcast camera: leads the ball's movement and pushes in when play reaches the final third
+        const zone = Math.max(0, Math.min(1, (Math.abs(b.x) - 28) / 22));
+        const dist = (view.replay ? 20 : 30) - 8 * zone, height = (view.replay ? 9 : 15) - 3.5 * zone;
+        const lookX = b.x * 0.92 + (b.vx || 0) * 0.25, lookZ = b.z * 0.55 + (b.vz || 0) * 0.1;
+        camPos.lerp(new THREE.Vector3(lookX, height, f * dist + b.z * 0.55), Math.min(1, dt * 2.5));
+        camLook.lerp(new THREE.Vector3(lookX, 0, lookZ - f * 1), Math.min(1, dt * 3));
+      }
       camera.position.copy(camPos);
+      if (shake > 0.01) {
+        camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake;
+        shake *= Math.exp(-dt * 6);
+      }
       camera.lookAt(camLook);
       renderer.render(scene, camera);
     },
+
+    _renderer() { return renderer; },   // for profiling
 
     snapCamera(view) {
       const f = view.flip ? -1 : 1;

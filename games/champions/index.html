@@ -53,6 +53,8 @@
     opacity: 0; transition: opacity .3s; white-space: nowrap;
   }
   #hint.show { opacity: 1; }
+  #replayTag { position: absolute; top: max(14px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); font-family: var(--display); font-weight: 800; letter-spacing: 3px; color: var(--gold); background: var(--panel); border: 1px solid var(--line); padding: 4px 14px; border-radius: 6px; opacity: 0; transition: opacity .2s; }
+  #replayTag.show { opacity: 1; }
   #power { position: absolute; left: 50%; bottom: max(58px, calc(env(safe-area-inset-bottom) + 50px)); transform: translateX(-50%); width: 220px; height: 10px; border-radius: 6px; background: rgba(0,0,0,.5); border: 1px solid var(--line); overflow: hidden; opacity: 0; }
   #power.show { opacity: 1; }
   #power i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--good), var(--gold) 70%, var(--them)); }
@@ -162,6 +164,7 @@
   <div id="banner"><div class="big" id="bnBig"></div><div class="small" id="bnSmall"></div></div>
   <div id="power"><i id="powerFill"></i></div>
   <div id="hint"></div>
+  <div id="replayTag">● REPLAY</div>
   <canvas id="radar" width="420" height="272"></canvas>
 </div>
 

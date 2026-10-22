@@ -8,6 +8,7 @@ var FC = window.FC = window.FC || {};
   const G = 9.81;
   const MAGNUS = 0.012;      // lift per (rad/s x m/s): ~2 m of curl on a 25 m finesse shot
   const SPIN_DECAY = 0.5;    // spin loss per second in flight
+  const GOAL_BREAK = 6.5;    // seconds between a goal and the restart (celebration + replay)
 
   // 4-3-3 in the team's own frame: x from -1 (own goal) to 1 (opponent goal), z from -1 to 1.
   const FORMATION = [
@@ -47,7 +48,7 @@ var FC = window.FC = window.FC || {};
             rating: r + (f.role === 'fwd' ? 1 : 0),
             x: 0, z: 0, vx: 0, vz: 0, face: 0, kickT: 0, stunT: 0, tackleCd: 0, dive: 0, decideT: 0, plan: null,
             touchCd: 0, jumpT: 0, headBuf: 0, headAct: null, headDir: null, pending: null, shield: false, shieldT: 0, knock: false,
-            off: false, yellow: 0, wallSpot: null, wallT: 0,
+            off: false, yellow: 0, wallSpot: null, wallT: 0, slideT: 0,
           });
         }
       }
@@ -432,7 +433,8 @@ var FC = window.FC = window.FC || {};
       const reach = slide ? 2.6 : 1.7;
       const dist = hyp(b.x - p.x, b.z - p.z);
       p.tackleCd = slide ? 1.2 : 0.6;
-      p.kickT = slide ? 1 : 0.6;
+      p.kickT = slide ? 0 : 0.6;
+      if (slide) { p.slideT = 0.7; this.emit('slide', { by: p.id }); }
       if (dist > reach) { if (slide) p.stunT = 0.9; return false; }
       const c = this.ctrl[p.team];
       // tackling from behind: the tackler is behind the carrier's facing direction
@@ -503,9 +505,11 @@ var FC = window.FC = window.FC || {};
       if (this.phase === 'fulltime') return;
       this.phaseT += dt;
       if (this.phase === 'goal') {
+        // celebration then replay (~6.5 s); any button from a human skips the replay
+        for (const c of this.ctrl) if (c.actions.length) { if (this.phaseT > 1.2) this.phaseT = GOAL_BREAK; c.actions.length = 0; }
         this.ballPhysics(dt);
         this.movePlayers(dt, true);
-        if (this.phaseT > 3) this.afterBreak();
+        if (this.phaseT >= GOAL_BREAK) this.afterBreak();
         return;
       }
       if (this.phase === 'halftime') {
@@ -1075,6 +1079,7 @@ var FC = window.FC = window.FC || {};
         if (p.stunT > 0) p.stunT -= dt;
         if (p.headBuf > 0) p.headBuf -= dt;
         if (p.jumpT > 0) p.jumpT = Math.max(0, p.jumpT - dt);
+        if (p.slideT > 0) { p.slideT = Math.max(0, p.slideT - dt); p.vx *= 1 - dt * 2; p.vz *= 1 - dt * 2; }
         if (p.shieldT > 0) p.shieldT -= dt;
         const c = this.ctrl[p.team];
         const d = this.dir(p.team);
@@ -1308,8 +1313,8 @@ var FC = window.FC = window.FC || {};
     view() {
       const b = this.ball;
       return {
-        ball: { x: b.x, y: b.y, z: b.z, vx: b.vx, vz: b.vz },
-        players: this.players.map(p => ({ x: p.x, z: p.z, face: p.face, spd: hyp(p.vx, p.vz), kick: p.kickT, dive: p.dive, jump: p.jumpT, shield: p.shield ? 1 : 0 })),
+        ball: { x: b.x, y: b.y, z: b.z, vx: b.vx, vy: b.vy, vz: b.vz },
+        players: this.players.map(p => ({ x: p.x, z: p.z, face: p.face, spd: hyp(p.vx, p.vz), kick: p.kickT, dive: p.dive, jump: p.jumpT, shield: p.shield ? 1 : 0, slide: p.slideT })),
         active: [this.ctrl[0].type === 'human' ? this.ctrl[0].active : -1, this.ctrl[1].type === 'human' ? this.ctrl[1].active : -1],
         owner: b.owner,
       };

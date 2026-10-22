@@ -12,7 +12,7 @@ var FC = window.FC = window.FC || {};
 
   const S = {
     role: 'demo', match: null, cfg: null, myTeam: 0, paused: false, acc: 0,
-    view: null, hud: null, kits: null, ended: false,
+    view: null, hud: null, kits: null, ended: false, history: [], goalAt: 0, goalScorer: -1,
     pick: { you: store.get('fsg.champions.you', 5), them: store.get('fsg.champions.them', 20), side: 'you' },
     diff: 'normal', halfSeconds: 180,
   };
@@ -144,7 +144,7 @@ var FC = window.FC = window.FC || {};
 
   // ---------- match control ----------
   function startMatch(cfg) {
-    S.cfg = cfg; S.role = cfg.role; S.ended = false; S.paused = false; S.acc = 0;
+    S.cfg = cfg; S.role = cfg.role; S.ended = false; S.paused = false; S.acc = 0; S.history = []; S.goalAt = 0;
     S.myTeam = cfg.role === 'guest' ? 1 : 0;
     S.kits = FC.pickKits(cfg.home, cfg.away);
     FC.Render.setTeams(S.kits);
@@ -210,6 +210,8 @@ var FC = window.FC = window.FC || {};
   // ---------- events → sound / banners ----------
   function handleEvents(evs) {
     for (const e of evs) {
+      FC.Render.onEvent(e, S.view);
+      if (e.e === 'goal' && S.role !== 'demo') { S.goalAt = performance.now() / 1000; S.goalScorer = e.id; }
       switch (e.e) {
         case 'kick': FC.Audio.kick(e.power); break;
         case 'post': FC.Audio.post(); FC.Audio.oooh(); break;
@@ -374,7 +376,24 @@ var FC = window.FC = window.FC || {};
       const sp = S.hud && S.hud.setpiece;
       const fk = sp && sp.interactive && sp.team === S.myTeam && S.hud.phase === 'setpiece' && S.role !== 'demo'
         ? { gx: (sp.team === 0 ? 1 : -1) * FC.PITCH.HL, aimZ: sp.aim.z, aimY: sp.aim.y } : null;
-      FC.Render.draw(Object.assign({}, S.view, { flip: S.myTeam === 1, fk, active: S.role === 'demo' ? [-1, -1] : S.view.active }), dt);
+      // goal: ~2 s orbit around the scorer, then a slow-motion replay of the build-up
+      const nowS = performance.now() / 1000;
+      let shown = S.view, extra = {};
+      if (S.goalAt && S.hud && S.hud.phase !== 'goal' && nowS - S.goalAt > 1) S.goalAt = 0;
+      const age = S.goalAt ? nowS - S.goalAt : -1;
+      if (age >= 0 && age < 2) {
+        const q = S.goalScorer >= 0 ? S.view.players[S.goalScorer] : S.view.ball;
+        extra.celebrate = { x: q.x, z: q.z };
+      } else if (age >= 2 && S.history.length) {
+        const t = S.goalAt - 2.6 + (age - 2) * 0.55;
+        let i = S.history.findIndex(h => h.t >= t); if (i < 0) i = S.history.length - 1;
+        shown = S.history[i].view; extra.replay = true;
+      } else if (!S.goalAt) {
+        S.history.push({ t: nowS, view: S.view });
+        while (S.history.length && S.history[0].t < nowS - 4) S.history.shift();
+      }
+      $('replayTag').classList.toggle('show', !!extra.replay);
+      FC.Render.draw(Object.assign({}, shown, extra, { flip: S.myTeam === 1, fk, active: S.role === 'demo' || extra.replay ? [-1, -1] : shown.active }), dt);
       if (S.role !== 'demo') { updateHud(); drawRadar(S.view); }
     }
     requestAnimationFrame(frame);

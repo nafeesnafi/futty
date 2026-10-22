@@ -8,7 +8,7 @@ var FC = window.FC = window.FC || {};
   const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const SNAP_EVERY = 0.05;        // 20 snapshots per second
   const INTERP_DELAY = 0.1;       // guest renders 100 ms behind the newest snapshot
-  const PROTOCOL = 1;
+  const PROTOCOL = 2;
 
   const N = {
     peer: null, conn: null, role: null, code: '', state: 'home', error: '',
@@ -192,17 +192,17 @@ var FC = window.FC = window.FC || {};
   const r2 = v => Math.round(v * 100) / 100;
   function packSnap(view, hud) {
     const p = [];
-    for (const s of view.players) p.push(r2(s.x), r2(s.z), r2(s.face), r2(s.spd), r2(s.kick), r2(s.dive || 0));
+    for (const s of view.players) p.push(r2(s.x), r2(s.z), r2(s.face), r2(s.spd), r2(s.kick), r2(s.dive || 0), r2(s.jump || 0), r2(s.slide || 0), s.shield ? 1 : 0);
     const b = view.ball;
-    return { t: 's', k: ++N.seq, c: r2(performance.now() / 1000), b: [r2(b.x), r2(b.y), r2(b.z), r2(b.vx), r2(b.vz)], p, a: view.active, h: hud };
+    return { t: 's', k: ++N.seq, c: r2(performance.now() / 1000), b: [r2(b.x), r2(b.y), r2(b.z), r2(b.vx), r2(b.vz), r2(b.vy || 0)], p, a: view.active, h: hud };
   }
   function unpack(m) {
     const players = [];
     for (let i = 0; i < 22; i++) {
-      const o = i * 6;
-      players.push({ x: m.p[o], z: m.p[o + 1], face: m.p[o + 2], spd: m.p[o + 3], kick: m.p[o + 4], dive: m.p[o + 5] });
+      const o = i * 9;
+      players.push({ x: m.p[o], z: m.p[o + 1], face: m.p[o + 2], spd: m.p[o + 3], kick: m.p[o + 4], dive: m.p[o + 5], jump: m.p[o + 6], slide: m.p[o + 7], shield: m.p[o + 8] });
     }
-    return { c: m.c, view: { ball: { x: m.b[0], y: m.b[1], z: m.b[2], vx: m.b[3], vz: m.b[4] }, players, active: m.a }, hud: m.h };
+    return { c: m.c, view: { ball: { x: m.b[0], y: m.b[1], z: m.b[2], vx: m.b[3], vz: m.b[4], vy: m.b[5] }, players, active: m.a }, hud: m.h };
   }
   function pushSnap(m) {
     const s = unpack(m);
@@ -223,10 +223,10 @@ var FC = window.FC = window.FC || {};
     const t = Math.max(0, Math.min(1, (rt - a.c) / ((b.c - a.c) || 1)));
     const L = (x, y) => x + (y - x) * t;
     const view = {
-      ball: { x: L(a.view.ball.x, b.view.ball.x), y: L(a.view.ball.y, b.view.ball.y), z: L(a.view.ball.z, b.view.ball.z), vx: b.view.ball.vx, vz: b.view.ball.vz },
+      ball: { x: L(a.view.ball.x, b.view.ball.x), y: L(a.view.ball.y, b.view.ball.y), z: L(a.view.ball.z, b.view.ball.z), vx: b.view.ball.vx, vz: b.view.ball.vz, vy: b.view.ball.vy },
       players: b.view.players.map((q, k) => {
         const p = a.view.players[k];
-        return { x: L(p.x, q.x), z: L(p.z, q.z), face: lerpAngle(p.face, q.face, t), spd: L(p.spd, q.spd), kick: q.kick, dive: q.dive };
+        return { x: L(p.x, q.x), z: L(p.z, q.z), face: lerpAngle(p.face, q.face, t), spd: L(p.spd, q.spd), kick: q.kick, dive: q.dive, jump: q.jump, slide: q.slide, shield: q.shield };
       }),
       active: b.view.active,
     };
