@@ -491,6 +491,11 @@
         .pad(2.5).pad(3, 4.5).go(3.5, 5, { s: 2.4 }).go(5.5, -6, { s: 2.2 }).check(2.5)
         .pad(2.5).pad(3, 4.5, { s: 2.6 }).go(3.5, 5, { s: 2 }).go(5.5, -5, { s: 2 }).finish(3),
     },
+    {
+      name: 'Double Helix', sky: 0x9c8aa0, tip: 'Two tight spirals in opposite directions with crumbling steps.',
+      plats: course().go(2.5).spiral(13, 4.5, 1, 2.4, 2, 1, i => i === 12 ? 'check' : i % 2 ? 'crumble' : null)
+        .go(3).spiral(13, 4.5, 1, 2.6, 1.9, -1, i => i % 2 ? 'crumble' : null).finish(2.8, 0.5),
+    },
   ];
 
   // ---------- storage ----------

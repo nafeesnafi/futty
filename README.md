@@ -99,6 +99,7 @@ level as fast as you can:
 47. **Clockwork**: platforms moving on every axis at once. Learn the timing
 48. **Sky Fortress**: climb the walls of a floating fortress, ledge by ledge
 49. **Freefall**: bounce high, then drop a long way onto small targets
+50. **Double Helix**: two tight spirals in opposite directions with crumbling steps
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 
