@@ -83,6 +83,7 @@ level as fast as you can:
 31. **Sunset Sprint**: narrow beams with long jumps in between. Fast and risky
 32. **Bounce Maze**: pads go up, down and around the corner
 33. **Storm Front**: a grey sky and restless platforms in every direction
+34. **Mist Walk**: the fog rolls in. Small platforms, long beams, careful footing
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 
