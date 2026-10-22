@@ -319,6 +319,12 @@
         .go(2.5, 0, { m: { axis: 'y', amp: 2.5, speed: 1.2 } }).go(2.5, 2.5).check()
         .turn(-90).go(2.5, 0, { m: { axis: 'y', amp: 2.8, speed: 1.3 } }).finish(2.5, 2.6),
     },
+    {
+      name: 'Zig Zag Canyon', sky: 0xd9a98a, tip: 'Sharp angles left and right over a long drop.',
+      plats: course().go(2.5).zig(6, 2.8, 0.3, 45, 2.4).check()
+        .zig(6, 3, 0.3, 50, 2.2).check()
+        .zig(6, 3.2, 0, 50, 2.2, { type: 'crumble' }).finish(),
+    },
   ];
 
   // ---------- storage ----------
