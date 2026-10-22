@@ -111,6 +111,11 @@ wins (10-minute limit). Every sound is generated in the browser with the Web Aud
 | Hold breath while scoped | Shift |
 | Scoreboard · FPS counter · pause | Tab · F · Esc |
 
+**On phones and tablets** (play sideways): the left thumb is a floating move stick (push it to the
+edge to sprint), drag the right side of the screen to look, and hold FIRE (drag it to aim while shooting).
+There are buttons for AIM, JUMP, CROUCH (slide while sprinting), R (reload) and ⇄ (switch weapon), plus
+STEADY while scoped and UAV / AIRSTRIKE when a streak is ready. Graphics default to Low on phones.
+
 Health regenerates after 4 seconds without damage. Headshots deal double damage (triple with the sniper),
 and bullets go through wooden crates and railings. Enemies show on the radar for a moment when they fire.
 Bots patrol, react to gunfire, strafe in fights and retreat to cover when they are hurt. Difficulty
