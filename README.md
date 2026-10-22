@@ -86,6 +86,7 @@ level as fast as you can:
 34. **Mist Walk**: the fog rolls in. Small platforms, long beams, careful footing
 35. **Grand Spiral**: a tall, tight spiral with small steps. Keep climbing
 36. **Leap of Faith**: huge drops onto distant platforms. Commit to every jump
+37. **Shuffle**: crossing movers, some fast and some slow. Pick your moment
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 
