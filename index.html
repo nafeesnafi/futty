@@ -199,12 +199,13 @@
   }
   const ch = read('fsg.champions', null);
   if (ch) document.getElementById('recChampions').textContent = `W ${ch.w} · D ${ch.d} · L ${ch.l}`;
+  const PK_LEVELS = 3;
   const pk = read('fsg.parkour', null);
   if (pk) {
     const done = Object.keys(pk).length;
     const total = Object.values(pk).reduce((a, b) => a + b, 0);
-    document.getElementById('stLevels').textContent = `${done}/3`;
-    document.getElementById('recParkour').textContent = done === 3 ? `All cleared · ${total.toFixed(1)}s total` : `${done}/3 levels cleared`;
+    document.getElementById('stLevels').textContent = `${done}/${PK_LEVELS}`;
+    document.getElementById('recParkour').textContent = done >= PK_LEVELS ? `All cleared · ${total.toFixed(1)}s total` : `${done}/${PK_LEVELS} levels cleared`;
   }
 </script>
 </body>

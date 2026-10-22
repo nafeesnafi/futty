@@ -38,9 +38,12 @@
   #overlay.hidden { display: none; }
   #overlay h1 { margin: 0; font-size: clamp(30px, 7vw, 56px); letter-spacing: 1px; color: #f0c674; }
   #overlay p { margin: 0; max-width: 520px; line-height: 1.5; opacity: .92; }
-  #levels { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  #levels {
+    display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; max-width: 860px;
+    max-height: 48vh; overflow-y: auto; padding: 4px; touch-action: pan-y;
+  }
   .lvl {
-    width: 150px; padding: 14px 10px; border-radius: 12px; cursor: pointer; font: inherit; color: inherit;
+    width: 132px; padding: 10px 8px; border-radius: 12px; cursor: pointer; font: inherit; color: inherit;
     background: rgba(251,245,234,.1); border: 2px solid rgba(251,245,234,.35);
     display: flex; flex-direction: column; gap: 4px; align-items: center;
   }
@@ -118,6 +121,63 @@
     return out;
   }
 
+  // Course builder: lays platforms one after another along a heading (0° = -z, 90° = +x).
+  // gap is the edge-to-edge distance along the heading, rise the change in top height.
+  function course() {
+    const out = [{ p: [0, 0, 0], s: [6, 6] }];
+    let x = 0, y = 0, z = 0, w = 6, d = 6, a = 0;
+    const rad = deg => deg * Math.PI / 180;
+    const half = (w, d, dx, dz) => Math.min(Math.abs(dx) > 1e-6 ? w / 2 / Math.abs(dx) : 1e9, Math.abs(dz) > 1e-6 ? d / 2 / Math.abs(dz) : 1e9);
+    const size = s => Array.isArray(s) ? s : [s, s];
+    const along = () => Math.abs(Math.sin(a)) > Math.abs(Math.cos(a)) ? 'x' : 'z';
+    const axis = k => k === 'fwd' ? along() : k === 'side' ? (along() === 'x' ? 'z' : 'x') : k;
+    const c = {
+      turn(deg) { a += rad(deg); return c; },
+      // o: { s, type, m: { axis: x|y|z|fwd|side, amp, speed, phase }, dir (one-off angle offset), h }
+      go(gap, rise = 0, o = {}) {
+        const [nw, nd] = size(o.s || 3), b = a + rad(o.dir || 0);
+        const dx = Math.sin(b), dz = -Math.cos(b);
+        const dist = half(w, d, dx, dz) + gap + half(nw, nd, dx, dz);
+        x += dx * dist; z += dz * dist; y += rise; w = nw; d = nd;
+        const p = { p: [+x.toFixed(2), +y.toFixed(2), +z.toFixed(2)], s: [nw, nd] };
+        if (o.type) p.type = o.type;
+        if (o.h) p.h = o.h;
+        if (o.m) p.m = { ...o.m, axis: axis(o.m.axis) };
+        out.push(p);
+        return c;
+      },
+      check(gap = 2.5, rise = 0, o = {}) { return c.go(gap, rise, { s: 4, ...o, type: 'check' }); },
+      pad(gap = 2.5, rise = 0, o = {}) { return c.go(gap, rise, { s: 3, ...o, type: 'bounce' }); },
+      beam(len, width = 1, gap = 2, rise = 0, o = {}) { return c.go(gap, rise, { ...o, s: along() === 'x' ? [len, width] : [width, len] }); },
+      stairs(n, gap, rise, s = 3, o = {}) { for (let i = 0; i < n; i++) c.go(gap, rise, { s, ...o }); return c; },
+      zig(n, gap, rise = 0, ang = 35, s = 2.5, o = {}) { for (let i = 0; i < n; i++) c.go(gap, rise, { s, ...o, dir: i % 2 ? -ang : ang }); return c; },
+      crumbles(n, gap, rise = 0, s = 2.5, o = {}) { return c.stairs(n, gap, rise, s, { ...o, type: 'crumble' }); },
+      movers(n, ax, amp, speed, gap, s = 3, o = {}) {
+        for (let i = 0; i < n; i++) c.go(gap, 0, { s, ...o, m: { axis: ax, amp, speed, phase: i % 2 ? Math.PI : 0 } });
+        return c;
+      },
+      // n platforms on a circle of radius r ahead of the cursor, each rise higher; cw = 1 or -1
+      spiral(n, r, rise, gap, s = 2.5, cw = 1, typeAt = () => null) {
+        const dx = Math.sin(a), dz = -Math.cos(a);
+        const cx = x + dx * (half(w, d, dx, dz) + gap + s / 2 + r), cz = z + dz * (half(w, d, dx, dz) + gap + s / 2 + r);
+        const step = 2 * Math.asin(Math.min(1, (gap + s * 1.2) / (2 * r))) * cw;
+        let th = a + Math.PI;
+        for (let i = 0; i < n; i++) {
+          x = cx + r * Math.sin(th); z = cz - r * Math.cos(th); y += i ? rise : 0; w = d = s;
+          const p = { p: [+x.toFixed(2), +y.toFixed(2), +z.toFixed(2)], s: [s, s] }, t = typeAt(i);
+          if (t) { p.type = t; if (t === 'check') p.s = [s * 1.4, s * 1.4]; }
+          w = d = p.s[0];
+          out.push(p);
+          th += step;
+        }
+        a = th - step + Math.PI / 2 * cw;
+        return c;
+      },
+      finish(gap = 3, rise = 0) { c.go(gap, rise, { s: 6, type: 'finish' }); return out; },
+    };
+    return c;
+  }
+
   const LEVELS = [
     {
       name: 'Warm Up', tip: 'Learn the basics: jump the gaps and walk the beam.',
@@ -175,7 +235,7 @@
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   document.body.appendChild(renderer.domElement);
 
-  const SKY = 0xe8d3b0;
+  const SKY = 0xe8d3b0;   // default; levels may set their own sky colour
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(SKY);
   scene.fog = new THREE.Fog(SKY, 35, 150);
@@ -228,6 +288,7 @@
   function buildLevel(i) {
     if (levelGroup) scene.remove(levelGroup);
     levelGroup = new THREE.Group(); scene.add(levelGroup);
+    scene.background.set(LEVELS[i].sky || SKY); scene.fog.color.set(LEVELS[i].sky || SKY);
     plats = LEVELS[i].plats.map(d => {
       const type = d.type || 'normal', h = d.h || (type === 'bounce' ? 0.6 : 1);
       const geo = new THREE.BoxGeometry(d.s[0], h, d.s[1]);
@@ -367,12 +428,15 @@
     $('oTitle').textContent = 'SKY RUNNER';
     $('oText').textContent = 'Run, jump and climb across floating platforms to reach the golden finish. Don\'t look down.';
     const lv = $('levels'); lv.innerHTML = ''; lv.style.display = '';
+    let firstOpen = null;
     LEVELS.forEach((L, i) => {
       const b = document.createElement('button'); b.className = 'lvl';
       b.innerHTML = `<b>${i + 1}. ${L.name}</b><span>${best[i] != null ? 'Best ' + fmt(best[i]) : 'Not cleared'}</span>`;
       b.addEventListener('click', () => startLevel(i));
       lv.appendChild(b);
+      if (firstOpen === null && best[i] == null) firstOpen = b;
     });
+    if (firstOpen) lv.scrollTop = Math.max(0, firstOpen.offsetTop - lv.offsetTop - 8);
     $('oBtns').innerHTML = '';
     $('overlay').classList.remove('hidden');
     $('hud').style.visibility = 'hidden';

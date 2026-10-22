@@ -47,8 +47,8 @@ An endless highway racer: weave through traffic as long as you can and pick up â
 ## ğŸƒ Sky Runner (3D parkour)
 
 A third-person 3D platformer built with [three.js](https://threejs.org) (r160, vendored in
-`games/shared/lib/` under its MIT license, so it works offline). Reach the golden flag in each of
-three levels as fast as you can:
+`games/shared/lib/` under its MIT license, so it works offline). Reach the golden flag in every
+level as fast as you can:
 
 1. **Warm Up**: gaps, steps and a narrow beam
 2. **Moving Parts**: moving platforms and bounce pads
