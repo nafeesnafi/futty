@@ -101,6 +101,7 @@ level as fast as you can:
 49. **Freefall**: bounce high, then drop a long way onto small targets
 50. **Double Helix**: two tight spirals in opposite directions with crumbling steps
 51. **Razor Edge**: paper-thin beams, long gaps and no room for mistakes
+52. **Chaos Engine**: fast, small, moving, crumbling. Expert runners only
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 

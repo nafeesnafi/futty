@@ -502,6 +502,12 @@
         .turn(90).beam(10, 0.55, 3.5, 0.4).beam(8, 0.55, 3.5, 0, { type: 'crumble' }).check(3.5)
         .turn(-90).beam(12, 0.5, 3.8).turn(-90).beam(12, 0.5, 3.8, 0.4).finish(4),
     },
+    {
+      name: 'Chaos Engine', sky: 0x6e6478, tip: 'Fast, small, moving, crumbling. Expert runners only.',
+      plats: course().go(2.6, 0, { s: 2, m: { axis: 'side', amp: 4, speed: 2.2 } }).crumbles(2, 2.8, 0, 2).pad(2.8, 0, { s: 2.4 }).go(3.5, 4.5, { s: 2, m: { axis: 'side', amp: 2, speed: 1.6 } }).check(3)
+        .zig(4, 3.2, 0.5, 45, 1.6, { type: 'crumble' }).go(3.5, 0, { s: 2.2, m: { axis: 'fwd', amp: 1.5, speed: 2.2 } }).check(3.5)
+        .go(2.8, 0, { s: 2, m: { axis: 'y', amp: 2.5, speed: 2.2 } }).go(2.8, 2.5, { s: 1.6 }).movers(3, 'side', 4.5, 2.5, 2.8, 2).finish(3),
+    },
   ];
 
   // ---------- storage ----------
