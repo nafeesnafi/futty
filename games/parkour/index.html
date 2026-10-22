@@ -402,6 +402,10 @@
         .turn(-90).zig(5, 2.8, 0.2, 35, 2).beam(10, 0.8, 2.8).check()
         .turn(90).zig(5, 3, 0.3, 40, 1.8, { type: 'crumble' }).finish(),
     },
+    {
+      name: 'Grand Spiral', sky: 0xedc98f, tip: 'A tall, tight spiral with small steps. Keep climbing.',
+      plats: course().go(2.5).spiral(26, 5, 1, 2.2, 2.2, 1, i => i === 9 || i === 18 ? 'check' : i % 3 === 2 ? 'crumble' : null).finish(2.5, 0.5),
+    },
   ];
 
   // ---------- storage ----------
