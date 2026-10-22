@@ -67,6 +67,7 @@ level as fast as you can:
 15. **Gentle Descent**: down we go. Big drops are safe, just land on the platform
 16. **Pogo**: chain bounce pads together. Each one sends you higher
 17. **Tightrope**: even thinner beams, and some of them crumble
+18. **Windmill**: pairs of platforms swing past each other. Time it right
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 

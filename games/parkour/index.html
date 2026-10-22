@@ -300,6 +300,12 @@
         .turn(90).beam(6, 0.8, 2.5, 0, { type: 'crumble' }).beam(6, 0.8, 2, 0, { type: 'crumble' }).go(2.5, 0.5).check()
         .turn(-90).beam(12, 0.7, 2.5).finish(2.5),
     },
+    {
+      name: 'Windmill', sky: 0xe6c2b4, tip: 'Pairs of platforms swing past each other. Time it right.',
+      plats: course().go(2.5).movers(4, 'side', 3.5, 1.3, 2.4, 2.6).check()
+        .turn(90).movers(4, 'side', 3.5, 1.4, 2.4, 2.6).check()
+        .turn(-90).movers(4, 'side', 4, 1.5, 2.6, 2.4).finish(),
+    },
   ];
 
   // ---------- storage ----------
