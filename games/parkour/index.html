@@ -224,6 +224,12 @@
         .stairs(4, 2, 0.6, 3).go(2.5, 0, { s: 2.5 }).check()
         .zig(4, 2.5, 0.4, 35, 2.5).finish(),
     },
+    {
+      name: 'Lazy River', sky: 0xf0dcc4, tip: 'Slow drifting platforms. Wait for them to come to you.',
+      plats: course().go(2.5).movers(2, 'side', 2.5, 0.7, 2.5).go(2.5).check()
+        .movers(3, 'side', 3, 0.8, 2.5).check()
+        .go(2.5, 0.6).movers(2, 'side', 3.5, 0.9, 2.5, 3).finish(),
+    },
   ];
 
   // ---------- storage ----------

@@ -53,7 +53,8 @@ level as fast as you can:
 1. **Warm Up**: gaps, steps and a narrow beam
 2. **Moving Parts**: moving platforms and bounce pads
 3. **Sky Tower**: a spiral climb with crumbling platforms
-4. **Stepping Stones**: easy hops and gentle steps to get your legs going.
+4. **Stepping Stones**: easy hops and gentle steps to get your legs going
+5. **Lazy River**: slow drifting platforms. Wait for them to come to you
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 
