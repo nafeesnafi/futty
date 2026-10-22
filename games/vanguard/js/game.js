@@ -70,7 +70,10 @@
   }
 
   // ---------- input ----------
-  const input = { down: {}, pressed: {}, mouse: [false, false, false], wheel: 0 };
+  const input = G.input = { down: {}, pressed: {}, mouse: [false, false, false], wheel: 0, stick: null };
+  // phones / tablets: no pointer lock, touch overlay (touch.js) drives the same input object
+  G.touch = matchMedia('(pointer: coarse)').matches || ('ontouchstart' in window && !matchMedia('(pointer: fine)').matches);
+  if (G.touch) { G.noLock = true; if (store.get('fsg.vanguard.settings', null) === null) G.settings.gfx = 0; }
   addEventListener('keydown', (e) => {
     if (!G.running) return;
     if (['Tab', 'Space', 'ControlLeft', 'KeyW'].includes(e.code) || e.ctrlKey) e.preventDefault();
@@ -95,7 +98,7 @@
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   addEventListener('wheel', (e) => { if (G.running) input.wheel += Math.sign(e.deltaY); }, { passive: true });
   addEventListener('mousemove', (e) => {
-    if (!G.running || G.paused || G.ended || !(locked() || G.noLock)) return;
+    if (!G.running || G.paused || G.ended || G.touch || !(locked() || G.noLock)) return;
     // guard against the occasional huge jump some browsers report right after locking
     if (Math.abs(e.movementX) > 400 || Math.abs(e.movementY) > 400) return;
     G.player.look(e.movementX, e.movementY);
@@ -113,10 +116,12 @@
     else if (!G.noLock) setPaused(true);
   });
   document.addEventListener('pointerlockerror', () => { G.noLock = true; setPaused(false); });
+  G.setPaused = (p) => setPaused(p);
   function setPaused(p) {
     G.paused = p;
     $('pause').classList.toggle('hidden', !p);
-    input.down = {}; input.mouse = [false, false, false];
+    input.down = {}; input.mouse = [false, false, false]; input.stick = null;
+    if (G.onPauseChange) G.onPauseChange(p);
   }
 
   // ---------- teams / helpers ----------
@@ -241,8 +246,8 @@
     else if (p.multi >= 4) { medal('FURY KILL', 100); HUD.banner('FURY KILL', '+100'); A.announce('Fury kill'); }
     else if (head) HUD.banner('HEADSHOT', '+25');
     // killstreaks
-    if (p.streak === 3 && !G.uavEarned) { G.uavEarned = true; G.uavReady = true; HUD.banner('UAV READY', 'PRESS [4]'); A.announce('U A V ready'); }
-    if (p.streak === 5 && !G.airEarned) { G.airEarned = true; G.airReady = true; HUD.banner('AIRSTRIKE READY', 'PRESS [5]'); A.announce('Airstrike ready'); }
+    if (p.streak === 3 && !G.uavEarned) { G.uavEarned = true; G.uavReady = true; HUD.banner('UAV READY', G.touch ? 'TAP UAV' : 'PRESS [4]'); A.announce('U A V ready'); }
+    if (p.streak === 5 && !G.airEarned) { G.airEarned = true; G.airReady = true; HUD.banner('AIRSTRIKE READY', G.touch ? 'TAP AIRSTRIKE' : 'PRESS [5]'); A.announce('Airstrike ready'); }
   }
 
   function playerDied(killer) {
@@ -377,7 +382,8 @@
       $('hud').classList.remove('hidden');
       G.running = true;
       setPaused(false);
-      requestLock();
+      if (!G.touch) requestLock();
+      if (G.onMatchStart) G.onMatchStart();
       HUD.banner(G.mode === 'tdm' ? 'TEAM DEATHMATCH' : 'FREE-FOR-ALL', `FIRST TO ${G.killGoal} KILLS`);
       A.announce(G.mode === 'tdm' ? 'Team deathmatch. Engage.' : 'Free for all. Engage.');
     }, 30);

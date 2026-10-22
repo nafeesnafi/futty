@@ -73,8 +73,13 @@
       if (!this.alive) return;
       const g = this.game, d = this.def, a = this.ammo[this.cur];
       // ---------- input ----------
-      const fwd = (inp.down.KeyW ? 1 : 0) - (inp.down.KeyS ? 1 : 0);
-      const str = (inp.down.KeyD ? 1 : 0) - (inp.down.KeyA ? 1 : 0);
+      let fwd = (inp.down.KeyW ? 1 : 0) - (inp.down.KeyS ? 1 : 0);
+      let str = (inp.down.KeyD ? 1 : 0) - (inp.down.KeyA ? 1 : 0);
+      let stickMag = 1;
+      if (inp.stick) { // analog thumbstick (touch)
+        fwd = -inp.stick.y; str = inp.stick.x; stickMag = Math.min(1, Math.hypot(fwd, str));
+        if (Math.abs(fwd) < 0.25 && Math.abs(str) > 0.25) fwd = 0;
+      }
       if (inp.pressed.Digit1) this.switchTo('ar');
       if (inp.pressed.Digit2) this.switchTo('smg');
       if (inp.pressed.Digit3) this.switchTo('sniper');
@@ -100,7 +105,7 @@
       // ---------- horizontal movement ----------
       const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw);
       let wx = -sy * fwd + cy * str, wz = -cy * fwd - sy * str;
-      const wl = Math.hypot(wx, wz); if (wl > 0) { wx /= wl; wz /= wl; }
+      const wl = Math.hypot(wx, wz); if (wl > 0) { wx *= stickMag / wl; wz *= stickMag / wl; }
       if (this.sliding) {
         this.slideT -= dt;
         const sp = Math.max(0, hs - 6.5 * dt);
@@ -118,7 +123,7 @@
       this.jumpCd -= dt;
       if (this.onGround) this.lastGround = now;
       this.climbing = false;
-      if (ladder && (fwd !== 0)) {
+      if (ladder && Math.abs(fwd) > 0.3) {
         this.climbing = true; this.sliding = false;
         this.vel.y = fwd > 0 ? 3.4 : -3.4;
         this.vel.x *= 0.5; this.vel.z *= 0.5;
