@@ -473,6 +473,12 @@
         .turn(90).go(4.5, 0, { s: 2.6, m: { axis: 'side', amp: 3, speed: 1.6 } }).beam(12, 0.9, 4.4).check(4.4)
         .turn(-90).crumbles(4, 4.2, 0, 2.4).beam(12, 0.8, 4.4).finish(4.4),
     },
+    {
+      name: 'Clockwork', sky: 0xb8b0a2, tip: 'Platforms moving on every axis at once. Learn the timing.',
+      plats: course().go(2.5).go(2.6, 0, { m: { axis: 'side', amp: 3, speed: 1.5 } }).go(2.6, 0, { m: { axis: 'y', amp: 2, speed: 1.5 } }).go(3.5, 0, { m: { axis: 'fwd', amp: 1.5, speed: 1.5 } }).check(3.5)
+        .go(2.6, 0, { s: 2.4, m: { axis: 'y', amp: 2.2, speed: 1.8 } }).go(2.6, 2.2, { s: 2.4, m: { axis: 'side', amp: 3.5, speed: 1.8 } }).go(3.6, 0, { s: 2.4, m: { axis: 'fwd', amp: 1.6, speed: 1.8 } }).check(3.6)
+        .go(2.6, 0, { s: 2.2, m: { axis: 'side', amp: 4, speed: 2.1 } }).go(2.6, 0, { s: 2.2, m: { axis: 'y', amp: 2.5, speed: 2.1 } }).finish(2.6, 2.4),
+    },
   ];
 
   // ---------- storage ----------

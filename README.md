@@ -96,6 +96,7 @@ level as fast as you can:
 44. **Moonrise**: night falls. Climb toward the moon on lifts and pads
 45. **Star Steps**: small glowing steps in the dark sky
 46. **Midnight Express**: a long fast course in the dark. Sprint on every gap
+47. **Clockwork**: platforms moving on every axis at once. Learn the timing
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 
