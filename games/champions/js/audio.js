@@ -149,6 +149,7 @@ var FC = window.FC = window.FC || {};
       chant(1.4);
     },
     oooh() { if (ensure()) gasp(0.3, 1.0); },
+    cheer() { if (!ensure()) return; swell(0.4, 2.5); noise(1.2, 1600, 0.2, 'bandpass', 0.05, 0.7); },
 
     // called every frame with how dangerous play is (0..1); the crowd bed follows it
     update(dt, danger) {

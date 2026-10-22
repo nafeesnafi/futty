@@ -31,12 +31,12 @@ var FC = window.FC = window.FC || {};
 
   // controllers: [{ type: 'human'|'ai', difficulty }, ...]  (human input arrives via setInput / queueAction)
   FC.Match = class Match {
-    constructor({ home, away, halfSeconds = 180, controllers }) {
+    constructor({ home, away, halfSeconds = 180, controllers, shootout = false }) {
       this.teams = [FC.TEAMS[home], FC.TEAMS[away]];
       this.halfSeconds = halfSeconds;
       this.ctrl = controllers.map(c => ({
         type: c.type, diff: DIFFICULTY[c.difficulty || 'normal'],
-        input: { x: 0, z: 0, sprint: false, shield: false }, actions: [], active: -1,
+        input: { x: 0, z: 0, sprint: false, shield: false }, actions: [], active: -1, mentality: 1,
       }));
       this.players = [];
       for (let t = 0; t < 2; t++) {
@@ -48,7 +48,7 @@ var FC = window.FC = window.FC || {};
             rating: r + (f.role === 'fwd' ? 1 : 0),
             x: 0, z: 0, vx: 0, vz: 0, face: 0, kickT: 0, stunT: 0, tackleCd: 0, dive: 0, decideT: 0, plan: null,
             touchCd: 0, jumpT: 0, headBuf: 0, headAct: null, headDir: null, pending: null, shield: false, shieldT: 0, knock: false,
-            off: false, yellow: 0, wallSpot: null, wallT: 0, slideT: 0,
+            off: false, yellow: 0, wallSpot: null, wallT: 0, slideT: 0, stamina: 1, soSpot: null,
           });
         }
       }
@@ -69,7 +69,8 @@ var FC = window.FC = window.FC || {};
       this.restartKick = null;   // type of restart being taken (no offside from throw-ins, corners, goal kicks)
       this.firstKick = Math.random() < 0.5 ? 0 : 1;
       this.lastScorer = null;
-      this.startKickoff(this.firstKick);
+      this.so = null;
+      if (shootout) this.startShootout(); else this.startKickoff(this.firstKick);
     }
 
     dir(t) { return t === 0 ? 1 : -1; }   // home attacks +x
@@ -85,6 +86,11 @@ var FC = window.FC = window.FC || {};
     // ---------- external control ----------
     setInput(team, x, z, sprint, shield) { const c = this.ctrl[team]; c.input.x = x; c.input.z = z; c.input.sprint = !!sprint; c.input.shield = !!shield; }
     queueAction(team, a) { this.ctrl[team].actions.push(a); }
+    setMentality(team, m) {
+      m = clamp(m | 0, 0, 2);
+      if (this.ctrl[team].mentality !== m) { this.ctrl[team].mentality = m; this.emit('mentality', { team, m }); }
+    }
+
     setController(team, type, difficulty) {
       const c = this.ctrl[team]; c.type = type; c.diff = DIFFICULTY[difficulty || 'normal']; c.actions = [];
       if (type === 'ai') c.active = -1; else this.pickActive(team);
@@ -123,12 +129,13 @@ var FC = window.FC = window.FC || {};
       for (const p of this.players) { p.pending = null; p.headBuf = 0; p.shield = false; p.wallSpot = null; p.wallT = 0; }
     }
 
-    startSetpiece(type, team, x, z) {
+    startSetpiece(type, team, x, z, takerId) {
       this.resetBall(x, z);
       const d = this.dir(team), gx = d * HL;
       const distGoal = hyp(gx - x, z);
       let taker;
-      if (type === 'goalkick') taker = this.players[team * 11];
+      if (takerId != null) taker = this.players[takerId];
+      else if (type === 'goalkick') taker = this.players[team * 11];
       else if (type === 'penalty' || (type === 'freekick' && distGoal < 32)) {
         // the striker (or the next forward) steps up for penalties and shooting free kicks
         taker = [9, 10, 8, 7].map(i => this.players[team * 11 + i]).find(q => !q.off) || this.nearest(team, x, z, true);
@@ -167,7 +174,8 @@ var FC = window.FC = window.FC || {};
       this.phase = 'setpiece';
       const human = this.ctrl[team].type === 'human';
       const interactive = human && (type === 'penalty' || (type === 'freekick' && distGoal < 35));
-      this.setpiece = { type, team, taker: taker.id, t: 0, interactive, aim: { z: 0, y: type === 'penalty' ? 0.8 : 1.6 }, curl: 0 };
+      const gkHuman = type === 'penalty' && this.ctrl[1 - team].type === 'human';
+      this.setpiece = { type, team, taker: taker.id, t: 0, interactive, gkHuman, aim: { z: 0, y: type === 'penalty' ? 0.8 : 1.6 }, curl: 0 };
       if (type === 'corner') this.stats.corners[team]++;
       this.pickActive(team, taker.id);
       this.emit('whistle', { short: true });
@@ -189,6 +197,69 @@ var FC = window.FC = window.FC || {};
       this.shoot(p, power, sp.aim.z, HUMAN.shotErr * (pen ? 0.6 : 0.8),
         { curl: sp.curl ? 1 : 0, bendZ: sp.curl * d, ty: sp.aim.y });
       if (pen) this.ball.penalty = true;
+    }
+
+    // ---------- penalty shootout ----------
+    startShootout() {
+      this.so = { goals: [0, 0], taken: [[], []], turn: this.firstKick, result: null, resultT: 0, kickT: 0, order: [9, 10, 8, 7, 5, 6, 4, 3, 2, 1] };
+      this.nextPenalty();
+    }
+
+    nextPenalty() {
+      const so = this.so, team = so.turn, d = this.dir(team);
+      const n = so.taken[team].length, order = so.order.filter(i => !this.players[team * 11 + i].off);
+      const taker = this.players[team * 11 + order[n % order.length]];
+      // everyone else waits in the centre circle
+      for (const p of this.players) {
+        if (p.idx === 0 && p.team !== team) continue;
+        const a = (p.id / 22) * Math.PI * 2;
+        p.soSpot = { x: Math.cos(a) * 7, z: Math.sin(a) * 7 };
+        p.x = p.soSpot.x; p.z = p.soSpot.z; p.vx = p.vz = 0; p.face = Math.atan2(d, 0);
+      }
+      so.result = null; so.kickT = 0;
+      this.startSetpiece('penalty', team, d * (HL - 11), 0, taker.id);
+      for (const p of this.players) if (p.team !== team && p.idx === 0) { p.penGuess = null; p.dive = 0; }
+      if (this.ctrl[1 - team].type === 'human') this.ctrl[1 - team].active = -1;   // you're in goal
+    }
+
+    stepShootout(dt) {
+      const so = this.so, b = this.ball;
+      if (this.phase === 'soResult') {
+        so.resultT += dt;
+        this.ballPhysics(dt); this.movePlayers(dt, false);
+        if (so.resultT > 2) this.afterPenalty();
+        return;
+      }
+      if (this.phase === 'setpiece') return false;   // normal set-piece handling (aiming / AI taker)
+      so.kickT += dt;
+      this.ballPhysics(dt); this.movePlayers(dt, false); this.goalkeepers(dt);
+      const gk = this.players[(1 - so.turn) * 11];
+      if (b.owner === gk.id) this.penResult('save');
+      else if (so.kickT > 3.2) this.penResult('miss');
+      else this.checkOut();
+      return true;
+    }
+
+    penResult(r) {
+      const so = this.so;
+      if (so.result) return;
+      so.result = r;
+      if (r === 'goal') so.goals[so.turn]++;
+      so.taken[so.turn].push(r === 'goal' ? 'g' : 'x');
+      this.phase = 'soResult'; so.resultT = 0;
+      this.emit('pen', { team: so.turn, result: r, goals: so.goals.slice() });
+    }
+
+    afterPenalty() {
+      const so = this.so, [a, b] = so.taken.map(k => k.length), [ga, gb] = so.goals;
+      let done = false;
+      if (a <= 5 && b <= 5) {
+        const remA = 5 - a, remB = 5 - b;
+        done = ga > gb + remB || gb > ga + remA || (a === 5 && b === 5 && ga !== gb);
+      } else done = a === b && ga !== gb;   // sudden death after each pair
+      if (done) { this.phase = 'fulltime'; so.winner = ga > gb ? 0 : 1; this.emit('full', { shootout: true }); return; }
+      so.turn = 1 - so.turn;
+      this.nextPenalty();
     }
 
     // ---------- helpers ----------
@@ -513,22 +584,34 @@ var FC = window.FC = window.FC || {};
         return;
       }
       if (this.phase === 'halftime') {
-        if (this.phaseT > 3) { this.half = 2; this.clock = 0; this.phaseT = 0; this.startKickoff(1 - this.firstKick); }
+        if (this.phaseT > 3) {
+          this.half = 2; this.clock = 0; this.phaseT = 0;
+          for (const p of this.players) p.stamina = Math.min(1, p.stamina + 0.35);   // half-time rest
+          this.startKickoff(1 - this.firstKick);
+        }
         return;
       }
 
-      this.clock += dt;
-      if (this.clock >= this.halfSeconds && this.phase === 'play') {
+      if (this.so) {
+        if (this.phase === 'setpiece') { this.handleActions(); /* falls through to the set-piece branch below */ }
+        else { this.handleActions(); if (this.stepShootout(dt) !== false) return; }
+      } else this.clock += dt;
+      if (!this.so && this.clock >= this.halfSeconds && this.phase === 'play') {
         if (this.half === 1) { this.phase = 'halftime'; this.phaseT = 0; this.emit('half'); return; }
         this.phase = 'fulltime'; this.emit('full'); return;
       }
 
       const b = this.ball;
       const pt = this.possessionTeam();
-      this.stats.poss[pt >= 0 ? pt : b.lastTeam] += dt;
+      if (!this.so) this.stats.poss[pt >= 0 ? pt : b.lastTeam] += dt;
+      if (this.half === 2 && this.clock > this.halfSeconds * 0.5) for (let t = 0; t < 2; t++) {
+        if (this.ctrl[t].type !== 'ai') continue;
+        const diffG = this.score[t] - this.score[1 - t];
+        this.setMentality(t, diffG < 0 ? 2 : diffG > 0 ? 0 : 1);
+      }
 
       this.offLine[0] = this.offsideLine(0); this.offLine[1] = this.offsideLine(1);
-      this.handleActions();
+      if (!this.so) this.handleActions();
 
       if (this.phase === 'kickoff' || this.phase === 'setpiece') {
         const sp = this.setpiece;
@@ -572,6 +655,7 @@ var FC = window.FC = window.FC || {};
         if (c.type !== 'human') { c.actions.length = 0; continue; }
         while (c.actions.length) {
           const a = c.actions.shift();
+          if (a.a === 'mentality') { this.setMentality(t, a.m); continue; }
           const sp = this.setpiece;
           if ((this.phase === 'setpiece') && sp && sp.interactive && sp.team === t) {
             if (a.a === 'switch') { sp.curl = sp.curl === 0 ? 1 : sp.curl === 1 ? -1 : 0; continue; }
@@ -1021,6 +1105,7 @@ var FC = window.FC = window.FC || {};
     checkOut() {
       const b = this.ball;
       if (Math.abs(b.z) > HW + BALL_R) {
+        if (this.so) { this.penResult('miss'); return; }
         const team = 1 - b.lastTeam;
         this.emit('out');
         this.startSetpiece('throw', team, clamp(b.x, -HL + 1, HL - 1), Math.sign(b.z) * (HW - 0.05));
@@ -1034,6 +1119,7 @@ var FC = window.FC = window.FC || {};
           this.startSetpiece('goalkick', 1 - scoringTeam, s * (HL - 5.5), 0);
           return;
         }
+        if (this.so) { this.penResult(Math.abs(b.z) < GOAL_W / 2 && b.y < GOAL_H ? 'goal' : 'miss'); return; }
         if (Math.abs(b.z) < GOAL_W / 2 && b.y < GOAL_H) {
           if (this.phase !== 'play') return;
           this.score[scoringTeam]++;
@@ -1108,7 +1194,11 @@ var FC = window.FC = window.FC || {};
 
         p.shield = b.owner === p.id && (isActive ? c.input.shield : p.shieldT > 0);
         p.pressing = !isActive && c.type === 'human' && c.input.shield && b.owner >= 0 && this.players[b.owner].team !== p.team && chasers[p.team][0] === p.id;
-        let speed = (sprint ? 7.8 : 5.6) * this.rf(p) * (c.type === 'ai' ? c.diff.speed : 1);
+        // stamina: sprinting drains it and caps top speed; walking/standing recovers
+        const curSp = hyp(p.vx, p.vz);
+        if (sprint && curSp > 6) p.stamina = Math.max(0, p.stamina - dt * 0.06);
+        else p.stamina = Math.min(1, p.stamina + dt * (curSp < 2 ? 0.08 : 0.04));
+        let speed = (sprint ? 7.8 * (0.86 + 0.14 * p.stamina) : 5.6 * (0.96 + 0.04 * p.stamina)) * this.rf(p) * (c.type === 'ai' ? c.diff.speed : 1);
         if (b.owner === p.id) speed *= p.shield ? 0.45 : 0.9;
         if (p.stunT > 0) speed *= 0.35;
         if (this.phase === 'kickoff' || this.phase === 'setpiece') { if (p.id === this.setpiece.taker) speed = 0; }
@@ -1165,7 +1255,12 @@ var FC = window.FC = window.FC || {};
       if (bd < 30) { tx = lineX + d * clamp(1.2 + (30 - bd) * 0.12, 1.2, 4.5); tz = clamp(b.z * 0.35, -3, 3); }
       // penalty: commit to a side as the kick is struck
       if (b.penalty && b.shot && b.shot.team !== gk.team) {
-        if (gk.penGuess == null) gk.penGuess = Math.random() < 0.12 ? 0 : (Math.random() < 0.5 ? -1 : 1);
+        if (gk.penGuess == null) {
+          const hc = this.ctrl[gk.team];
+          // a human keeper dives the way they hold as the kick is struck (screen left/right behind the taker)
+          if (hc.type === 'human') gk.penGuess = Math.abs(hc.input.x) > 0.3 ? -Math.sign(hc.input.x) : 0;
+          else gk.penGuess = Math.random() < 0.12 ? 0 : (Math.random() < 0.5 ? -1 : 1);
+        }
         if (gk.penGuess) gk.dive = gk.penGuess * d * -1.1;
         return { tx: lineX + d * 0.3, tz: gk.penGuess * 2.4, sprint: true };
       }
@@ -1195,6 +1290,7 @@ var FC = window.FC = window.FC || {};
       const attacking = pt === p.team || (pt < 0 && b.lastTeam === p.team && b.receiver >= 0);
       const setp = (this.phase === 'kickoff' || this.phase === 'setpiece') ? this.setpiece : null;
 
+      if (this.so && p.soSpot) return { tx: p.soSpot.x, tz: p.soSpot.z, sprint: false };
       if (p.wallSpot) return { tx: p.wallSpot.x, tz: p.wallSpot.z, sprint: false };
       // planned runs (e.g. attacking a corner)
       if (p.plan) { p.plan.t -= dt; if (p.plan.t <= 0) p.plan = null; else return { tx: p.plan.x, tz: p.plan.z, sprint: true }; }
@@ -1224,15 +1320,17 @@ var FC = window.FC = window.FC || {};
             return { tx: o.x + (gx - o.x) * 0.04, tz: o.z + (0 - o.z) * 0.04, sprint: dist > 7 };
           }
           if (ci === 1) {
+            if (c.mentality === 2) return { tx: b.x, tz: b.z, sprint: true };   // attacking: second man presses too
             const gx = -d * HL;
             return { tx: b.x + (gx - b.x) * 0.3, tz: b.z * 0.75, sprint: false };
           }
         }
       }
-      // formation shape shifted with the ball
-      let x = f.x * HL * 0.92 + bx * 0.5 + (attacking ? 9 : -3);
+      // formation shape shifted with the ball; mentality pushes the whole block up or drops it off
+      const m = c.mentality;
+      let x = f.x * HL * 0.92 + bx * 0.5 + (attacking ? [5, 9, 13][m] : [-7, -3, 0][m]);
       let z = f.z * HW * (attacking ? 0.92 : 0.7) + bz * (attacking ? 0.2 : 0.35);
-      if (f.role === 'def') x = Math.min(x, attacking ? bx - 4 : bx - 6);
+      if (f.role === 'def') x = Math.min(x, attacking ? bx - [7, 4, 1][m] : bx - [8, 6, 4][m]);
       if (f.role === 'fwd' && attacking) x = clamp(Math.max(x + 5, bx + 10), -HL, HL - 13);
       if (f.role === 'mid' && attacking) x = Math.min(x, bx + 10);
       if (setp && setp.type === 'corner' && setp.team === p.team && f.role !== 'def') {
@@ -1327,10 +1425,13 @@ var FC = window.FC = window.FC || {};
       return {
         score: this.score.slice(), minute: this.minute, half: this.half, phase: this.phase, pressing,
         setpiece: this.setpiece && (this.phase === 'setpiece' || this.phase === 'kickoff') ? {
-          type: this.setpiece.type, team: this.setpiece.team, interactive: this.setpiece.interactive,
+          type: this.setpiece.type, team: this.setpiece.team, interactive: this.setpiece.interactive, gkHuman: this.setpiece.gkHuman,
           aim: this.setpiece.aim, curl: this.setpiece.curl, bx: this.ball.x, bz: this.ball.z,
         } : null,
         reds: this.stats.reds.slice(),
+        mentality: [this.ctrl[0].mentality, this.ctrl[1].mentality],
+        stamina: this.ctrl.map(c => c.type === 'human' && c.active >= 0 ? +this.players[c.active].stamina.toFixed(2) : null),
+        so: this.so ? { goals: this.so.goals.slice(), taken: this.so.taken.map(k => k.slice()), turn: this.so.turn, winner: this.so.winner } : null,
         lastScorer: this.lastScorer, stats: this.stats,
       };
     }

@@ -115,19 +115,37 @@ Green platforms are checkpoints. Fall into the clouds and you respawn at the las
 | Back to checkpoint | R | — |
 | Pause | P | — |
 
-## 🏆 Futt Champions (3D football, vs bot or online)
+## 🏆 Futt Champions (3D football, vs bot, cup, shootout or online)
 
 11-a-side 3D football with a broadcast camera. Pick any of the 36 clubs from the 2025/26 Champions
-League league phase (simplified kits, no crests) and play the bot (Easy / Normal / Hard) or a friend online.
+League league phase (simplified kits, no crests).
+
+**Modes:** Play vs Bot (Easy / Normal / Hard) · **Champions Cup**, a 16-club knockout (Round of 16 to
+Final, saved in the browser, other ties simulated from club ratings, draws go to penalties, trophy
+celebration) · **Penalty Shootout**, five kicks each then sudden death, aiming your kicks and diving
+as the keeper · **Online** with an invite code.
+
+**On the pitch:** the ball has spin, so finesse shots curl and full-power strikes knuckle. Dribbling
+uses touches (sprint touches are heavier and can be nicked). Players shield, jump for headers and hit
+volleys. The game has offside, fouls, yellow and red cards, free kicks with a wall and penalties
+(aim, curl and power for your own; dive in goal for theirs). Players have stamina, and there are
+Defensive / Balanced / Attacking mentalities. Goal nets ripple, the camera zooms near goal, and goals
+get a celebration orbit and a slow-motion replay.
 
 | Action | Keyboard | Gamepad | Touch |
 | --- | --- | --- | --- |
-| Move / sprint | WASD or arrows / Shift | Left stick / RB or RT | Stick / SPRINT |
+| Move / sprint | WASD or arrows / Shift (double-tap: knock-on) | Left stick / RB or RT | Stick / SPRINT |
 | Pass (tackle when defending) | J or Z | A | PASS |
 | Through ball | L or C | Y | THRU |
-| Shoot, hold for power (slide tackle when defending) | K or X | B | SHOOT |
-| Switch player | Q or Space | LB | SWITCH |
+| Lob / cross | I or V | X | LOB |
+| Shoot, hold for power, sideways to curl (slide tackle when defending) | K or X | B | SHOOT |
+| Fake shot | Pass while charging Shoot | A while holding B | PASS while holding SHOOT |
+| Switch player / hold: shield or call a team-mate to press | Q or Space | LB | SWITCH |
+| Mentality (defensive / balanced / attacking) | 1 / 2 / 3 | D-pad | DEF/BAL/ATT button |
 | Pause / mute | P or Esc / M | Start | ❚❚ |
+
+Free kicks near goal and penalties: move the gold target, Switch cycles curl, hold Shoot for power.
+Facing a penalty: hold left or right as the kick is taken to dive.
 
 **Online play.** *Play Online → Create invite* gives a 6-character code and an invite link; your
 friend enters the code (or opens the link) to join. The host's browser runs the match and the guest

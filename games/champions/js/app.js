@@ -35,11 +35,12 @@ var FC = window.FC = window.FC || {};
   }
   FC.kitCss = kitCss;
 
-  const screens = ['scrTitle', 'scrTeams', 'scrOnline', 'scrControls', 'scrPause', 'scrFull'];
+  const screens = ['scrTitle', 'scrTeams', 'scrOnline', 'scrControls', 'scrPause', 'scrFull', 'scrCup', 'scrTrophy'];
   function show(id) {
     for (const s of screens) $(s).classList.toggle('hidden', s !== id);
     const inMatch = !id && S.role !== 'demo';
-    $('hud').classList.toggle('hidden', !(S.role === 'local' || S.role === 'host' || S.role === 'guest'));
+    const matchRole = S.role === 'local' || S.role === 'host' || S.role === 'guest';
+    $('hud').classList.toggle('hidden', !(matchRole && (!id || id === 'scrPause' || id === 'scrFull')));
     document.body.classList.toggle('playing', inMatch);
     FC.Input.enable(inMatch);
   }
@@ -58,6 +59,7 @@ var FC = window.FC = window.FC || {};
 
   // ---------- record ----------
   function renderRecord() {
+    $('cupSub').textContent = FC.Cup && FC.Cup.inProgress() ? 'Resume your cup run' : '16-club knockout';
     const r = store.get('fsg.champions', null);
     $('record').textContent = r ? `Your record: ${r.p} played · ${r.w} W · ${r.d} D · ${r.l} L` : 'No matches played yet';
   }
@@ -90,7 +92,7 @@ var FC = window.FC = window.FC || {};
       b.querySelector('.cn').textContent = t.name;
       b.addEventListener('click', () => {
         S.pick[S.pick.side] = i;
-        if (S.pick.side === 'you' && !S.onlinePick) S.pick.side = 'them';
+        if (S.pick.side === 'you' && !S.onlinePick && S.pickMode !== 'cup') S.pick.side = 'them';
         store.set('fsg.champions.you', S.pick.you); store.set('fsg.champions.them', S.pick.them);
         renderTeams();
         if (S.onlinePick) S.onlinePick(i);
@@ -121,14 +123,21 @@ var FC = window.FC = window.FC || {};
     S.teamsBack = onBack;
     renderTeams(); show('scrTeams');
   };
-  function openBotPicker() {
-    S.onlinePick = null; S.teamsBack = null;
-    $('teamsTitle').textContent = 'Choose your clubs';
-    $('sideThem').classList.remove('hidden'); document.querySelector('.vs').classList.remove('hidden');
-    $('botOpts').classList.remove('hidden'); $('btnKickoff').textContent = 'Kick Off ▸';
+  // mode: 'match' (vs bot), 'shootout' (you vs opponent, no match length) or 'cup' (just your club)
+  function openModePicker(mode = 'match') {
+    S.onlinePick = null; S.teamsBack = null; S.pickMode = mode;
+    $('teamsTitle').textContent = mode === 'cup' ? 'Champions Cup: choose your club' : mode === 'shootout' ? 'Penalty shootout' : 'Choose your clubs';
+    const solo = mode === 'cup';
+    $('sideThem').classList.toggle('hidden', solo); document.querySelector('.vs').classList.toggle('hidden', solo);
+    $('btnRandom').classList.toggle('hidden', solo);
+    $('botOpts').classList.remove('hidden');
+    $('segLen').parentElement.classList.toggle('hidden', mode === 'shootout');
+    $('btnKickoff').textContent = mode === 'cup' ? 'Start the cup ▸' : mode === 'shootout' ? 'To the spot ▸' : 'Kick Off ▸';
     S.pick.side = 'you';
     renderTeams(); show('scrTeams');
   }
+  const openBotPicker = () => openModePicker('match');
+  FC.openModePicker = openModePicker;
   FC.pickedTeam = () => S.pick.you;
 
   $('btnBot').addEventListener('click', () => { FC.Audio.unlock(); openBotPicker(); });
@@ -137,8 +146,12 @@ var FC = window.FC = window.FC || {};
   $('teamsBack').addEventListener('click', () => { if (S.teamsBack) S.teamsBack(); else show('scrTitle'); });
   $('btnKickoff').addEventListener('click', () => {
     if (S.onlinePick) { if (S.teamsBack) S.teamsBack(); return; }
+    if (S.pickMode === 'cup') { FC.Cup.start(S.pick.you, S.diff, S.halfSeconds); return; }
+    if (S.pickMode === 'shootout') { FC.Shootout.start(S.pick.you, S.pick.them, S.diff); return; }
     startMatch({ role: 'local', home: S.pick.you, away: S.pick.them, difficulty: S.diff, halfSeconds: S.halfSeconds });
   });
+  $('btnCup').addEventListener('click', () => { FC.Audio.unlock(); FC.Cup.open(); });
+  $('btnShootout').addEventListener('click', () => { FC.Audio.unlock(); openModePicker('shootout'); });
   $('btnOnline').addEventListener('click', () => { FC.Audio.unlock(); if (FC.Net) FC.Net.open(); });
   if (!FC.Net) { $('btnOnline').disabled = true; $('btnOnline').querySelector('small').textContent = 'Coming soon'; }
 
@@ -156,14 +169,17 @@ var FC = window.FC = window.FC || {};
       const controllers = cfg.role === 'demo' ? [{ type: 'ai', difficulty: 'hard' }, { type: 'ai', difficulty: 'hard' }]
         : cfg.role === 'local' ? [{ type: 'human' }, { type: 'ai', difficulty: cfg.difficulty }]
         : [{ type: 'human' }, { type: 'human' }];
-      S.match = new FC.Match({ home: cfg.home, away: cfg.away, halfSeconds: cfg.halfSeconds, controllers });
+      S.match = new FC.Match({ home: cfg.home, away: cfg.away, halfSeconds: cfg.halfSeconds, controllers, shootout: !!cfg.shootout });
       S.view = S.match.view(); S.hud = S.match.hud();
     }
     if (S.view) FC.Render.snapCamera(Object.assign({}, S.view, { flip: S.myTeam === 1 }));
     $('netStat').classList.toggle('hidden', !(cfg.role === 'host' || cfg.role === 'guest'));
     if (cfg.role !== 'demo') {
       show(null); FC.Audio.startCrowd(); FC.Audio.whistle(true);
-      banner(`${H.short} v ${A.short}`, cfg.role === 'local' ? `${H.name} vs ${A.name} · ${cfg.difficulty}` : `${H.name} vs ${A.name}`, 2600);
+      if (cfg.shootout) banner('PENALTIES', `${H.name} vs ${A.name}`, 2600);
+      else banner(`${H.short} v ${A.short}`, cfg.role === 'local' ? `${H.name} vs ${A.name} · ${cfg.difficulty}` : `${H.name} vs ${A.name}`, 2600);
+      $('soBoard').classList.toggle('hidden', !cfg.shootout);
+      $('radar').classList.toggle('hidden', !!cfg.shootout);
     }
   }
   FC.startMatch = startMatch;
@@ -188,6 +204,11 @@ var FC = window.FC = window.FC || {};
   $('btnRestart').addEventListener('click', () => startMatch(S.cfg));
   $('btnQuit').addEventListener('click', () => { if (S.role === 'host' || S.role === 'guest') FC.Net.leave(); FC.toMenu(); });
   $('touchPause').addEventListener('click', () => pause(true));
+  $('touchTac').addEventListener('click', () => {
+    const cur = S.hud && S.hud.mentality ? S.hud.mentality[S.myTeam] : 1;
+    const act = { a: 'mentality', m: (cur + 1) % 3 };
+    if (S.role === 'guest') FC.Net.sendAction(act); else if (S.match) S.match.queueAction(S.myTeam, act);
+  });
   FC.Input.onPause(() => pause($('scrPause').classList.contains('hidden')));
   addEventListener('keydown', e => {
     if (e.code === 'Escape' || e.code === 'KeyP') {
@@ -202,7 +223,7 @@ var FC = window.FC = window.FC || {};
 
   FC.Input.onAction(a => {
     const inp = FC.Input.poll(), w = toWorld(inp.x, inp.y);
-    const act = { a: a.a, power: a.power, x: w.x, z: w.z };
+    const act = { a: a.a, power: a.power, x: w.x, z: w.z, m: a.m };
     if (S.role === 'guest') FC.Net.sendAction(act);
     else if (S.match && !S.paused) S.match.queueAction(S.myTeam, act);
   });
@@ -241,6 +262,15 @@ var FC = window.FC = window.FC || {};
           break;
         }
         case 'foul': if (S.role !== 'demo') FC.Audio.whistle(false); break;
+        case 'pen': {
+          const t = teamOf(e.team);
+          if (e.result === 'goal') { FC.Audio.net(); FC.Audio.cheer(); banner('SCORED', `${t.name} · ${e.goals.join(' – ')}`, 1600); }
+          else { FC.Audio.nearMiss(); banner(e.result === 'save' ? 'SAVED!' : 'MISSED', `${t.name} · ${e.goals.join(' – ')}`, 1600); }
+          break;
+        }
+        case 'mentality':
+          if (e.team === S.myTeam && S.role !== 'demo') { hint(`Mentality: ${['Defensive', 'Balanced', 'Attacking'][e.m]}`); lastHint = performance.now(); }
+          break;
         case 'offside': if (S.role !== 'demo') { FC.Audio.whistle(false); banner('OFFSIDE', `${teamOf(e.team).name} #${FC.NUMBERS[e.id % 11]}`, 1800); } break;
         case 'card': {
           if (S.role === 'demo') break;
@@ -268,11 +298,14 @@ var FC = window.FC = window.FC || {};
     hint('');
     const h = S.hud, cfg = S.cfg;
     const H = FC.TEAMS[cfg.home], A = FC.TEAMS[cfg.away];
+    const so = h.so;
     const my = h.score[S.myTeam], their = h.score[1 - S.myTeam];
-    saveResult(my, their);
-    $('ftLabel').textContent = my > their ? 'Full time · You win' : my < their ? 'Full time · You lose' : 'Full time · Draw';
+    const soMy = so ? so.goals[S.myTeam] : 0, soTheir = so ? so.goals[1 - S.myTeam] : 0;
+    if (so) saveResult(soMy, soTheir); else if (!(cfg.cup && my === their)) saveResult(my, their);
+    const won = so ? soMy > soTheir : my > their, lost = so ? soMy < soTheir : my < their;
+    $('ftLabel').textContent = (so ? 'Penalties' : 'Full time') + (won ? ' · You win' : lost ? ' · You lose' : ' · Draw');
     $('ftH').textContent = H.name; $('ftA').textContent = A.name;
-    $('ftScore').textContent = `${h.score[0]} – ${h.score[1]}`;
+    $('ftScore').textContent = so ? `${so.goals[0]} – ${so.goals[1]}` : `${h.score[0]} – ${h.score[1]}`;
     $('ftScorers').textContent = (S.scorers || []).map(e => `${FC.TEAMS[e.team === 0 ? cfg.home : cfg.away].short} ${e.id >= 0 ? '#' + FC.NUMBERS[e.id % 11] : 'OG'} ${e.minute}'`).join(' · ') || 'No goals';
     const st = h.stats, poss = st.poss[0] + st.poss[1] || 1;
     const rows = [
@@ -282,12 +315,15 @@ var FC = window.FC = window.FC || {};
       [st.fouls[0], 'Fouls', st.fouls[1]], [st.offsides[0], 'Offsides', st.offsides[1]],
       [st.yellows[0] + ' / ' + st.reds[0], 'Yellow / red', st.yellows[1] + ' / ' + st.reds[1]],
     ];
-    $('ftStats').innerHTML = rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('');
+    $('ftStats').innerHTML = so ? '' : rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('');
+    if (so) $('ftScorers').textContent = so.taken.map((k, t) => `${teamOf(t).short} ${k.map(r => r === 'g' ? '●' : '○').join(' ')}`).join('   ·   ');
     const btns = $('ftBtns'); btns.innerHTML = '';
     const add = (label, fn, primary) => { const b = document.createElement('button'); b.className = 'mbtn' + (primary ? ' primary' : ''); b.textContent = label; b.onclick = fn; btns.appendChild(b); };
-    if (S.role === 'local') {
-      add('Rematch', () => { S.scorers = []; startMatch(cfg); }, true);
-      add('Change clubs', () => { S.scorers = []; FC.toMenu(); openBotPicker(); });
+    if (cfg.cup) {
+      FC.Cup.afterMatch({ my, their, shootout: !!so, soMy, soTheir, carry: cfg.carry }, (l, fn, p) => add(l, () => { S.scorers = []; fn(); }, p));
+    } else if (S.role === 'local') {
+      add(so ? 'Again' : 'Rematch', () => { S.scorers = []; startMatch(cfg); }, true);
+      add('Change clubs', () => { S.scorers = []; FC.toMenu(); openModePicker(so ? 'shootout' : 'match'); });
     } else if (FC.Net) FC.Net.fullTimeButtons(add);
     add('Main menu', () => { S.scorers = []; if (S.role === 'host' || S.role === 'guest') FC.Net.leave(); FC.toMenu(); });
     show('scrFull');
@@ -336,7 +372,17 @@ var FC = window.FC = window.FC || {};
       hint(`Aim with the stick/WASD · Curl (Q): ${curl} · hold Shoot (K) for power${sp.type === 'penalty' ? '' : ' · Pass (J) to play it short'}`);
       lastHint = performance.now();
     }
-    $('sbClock').textContent = h.phase === 'halftime' ? 'HT' : h.phase === 'fulltime' ? 'FT' : `${h.minute}'`;
+    $('sbClock').textContent = h.so ? 'PENS' : h.phase === 'halftime' ? 'HT' : h.phase === 'fulltime' ? 'FT' : `${h.minute}'`;
+    const m = h.mentality ? h.mentality[S.myTeam] : 1, mName = ['DEF', 'BAL', 'ATT'][m];
+    $('sbMent').textContent = mName; $('sbMent').className = 'sb-ment ' + mName.toLowerCase(); $('touchTac').textContent = mName;
+    const stam = h.stamina ? h.stamina[S.myTeam] : null;
+    $('stamina').classList.toggle('hidden-bar', stam == null || !!h.so);
+    if (stam != null) $('staminaFill').style.width = Math.round(stam * 100) + '%';
+    if (h.so) {
+      $('soBoard').innerHTML = [0, 1].map(t => `<span>${teamOf(t).short}</span><span class="dots">${Array.from({ length: Math.max(5, h.so.taken[t].length) }, (_, i) => `<span class="dot ${h.so.taken[t][i] || ''}"></span>`).join('')}</span><span>${h.so.goals[t]}</span>`).join('');
+    }
+    const keeping = sp && sp.type === 'penalty' && sp.gkHuman && sp.team !== S.myTeam && h.phase === 'setpiece';
+    if (keeping && performance.now() - lastHint > 300) { hint('You are in goal: hold left or right as the kick is taken to dive'); lastHint = performance.now(); }
     const charging = FC.Input.charging();
     $('power').classList.toggle('show', charging);
     $('powerFill').style.width = (FC.Input.chargeLevel() * 100) + '%';
@@ -375,8 +421,9 @@ var FC = window.FC = window.FC || {};
     }
     if (S.view) {
       const sp = S.hud && S.hud.setpiece;
-      const fk = sp && sp.interactive && sp.team === S.myTeam && S.hud.phase === 'setpiece' && S.role !== 'demo'
-        ? { gx: (sp.team === 0 ? 1 : -1) * FC.PITCH.HL, aimZ: sp.aim.z, aimY: sp.aim.y } : null;
+      const facing = sp && sp.type === 'penalty' && sp.gkHuman && sp.team !== S.myTeam;   // you're the keeper
+      const fk = sp && (sp.interactive && sp.team === S.myTeam || facing) && S.hud.phase === 'setpiece' && S.role !== 'demo'
+        ? { gx: (sp.team === 0 ? 1 : -1) * FC.PITCH.HL, aimZ: facing ? 0 : sp.aim.z, aimY: facing ? -5 : sp.aim.y } : null;
       // goal: ~2 s orbit around the scorer, then a slow-motion replay of the build-up
       const nowS = performance.now() / 1000;
       let shown = S.view, extra = {};

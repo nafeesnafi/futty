@@ -149,8 +149,8 @@ var FC = window.FC = window.FC || {};
         case 'team': N.oppTeam = validTeam(m.team); sendLobby(); render(); break;
         case 'in': if (N.inMatch && FC.state.match) FC.state.match.setInput(1, num(m.x), num(m.z), !!m.sp, !!m.sh); break;
         case 'act':
-          if (N.inMatch && FC.state.match && ['pass', 'through', 'shoot', 'switch', 'lob', 'fake', 'knock'].includes(m.a))
-            FC.state.match.queueAction(1, { a: m.a, power: clamp01(m.power), x: num(m.x), z: num(m.z) });
+          if (N.inMatch && FC.state.match && ['pass', 'through', 'shoot', 'switch', 'lob', 'fake', 'knock', 'mentality'].includes(m.a))
+            FC.state.match.queueAction(1, { a: m.a, power: clamp01(m.power), x: num(m.x), z: num(m.z), m: Math.max(0, Math.min(2, m.m | 0)) });
           break;
         case 'rematch': showBanner('Rematch?', 'Your friend wants a rematch'); break;
       }
@@ -244,7 +244,7 @@ var FC = window.FC = window.FC || {};
   FC.Net = {
     open() { if (N.state !== 'lobby' && N.state !== 'hosting' && N.state !== 'joining') N.state = 'home'; FC.show('scrOnline'); render(); },
     leave() { send({ t: 'bye' }); destroy(); N.state = 'home'; N.oppTeam = null; },
-    sendAction(a) { send({ t: 'act', a: a.a, power: a.power, x: a.x, z: a.z }); },
+    sendAction(a) { send({ t: 'act', a: a.a, power: a.power, x: a.x, z: a.z, m: a.m }); },
     hostTick(dt, view, hud, evs) {
       if (!N.inMatch || !N.conn) return;
       heartbeat(dt);

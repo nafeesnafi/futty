@@ -141,10 +141,35 @@
   .keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 15px; }
   .keys kbd { font-family: var(--body); font-weight: 700; background: rgba(255,255,255,.1); border: 1px solid var(--line); border-radius: 5px; padding: 1px 7px; font-size: 13px; white-space: nowrap; }
   .note { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0; }
+  .sb-ment { padding: 4px 10px; border-left: 1px solid var(--line); font-size: 15px; color: var(--muted); display: flex; align-items: center; }
+  .sb-ment.att { color: #ff8a65; } .sb-ment.def { color: #7dd3fc; }
+  #stamina { position: absolute; left: max(12px, env(safe-area-inset-left)); top: calc(max(12px, env(safe-area-inset-top)) + 46px); display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: 1.5px; font-weight: 700; color: var(--muted); }
+  #stamina i { width: 120px; height: 7px; background: rgba(0,0,0,.45); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+  #stamina b { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, var(--them), var(--gold) 40%, var(--good)); background-size: 120px 100%; }
+  #stamina.hidden-bar { visibility: hidden; }
+  #soBoard { position: absolute; top: calc(max(12px, env(safe-area-inset-top)) + 46px); left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; display: grid; grid-template-columns: auto auto auto; gap: 4px 12px; align-items: center; font-family: var(--display); font-weight: 800; font-size: 18px; }
+  #soBoard .dots { display: flex; gap: 5px; }
+  #soBoard .dot { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--muted); }
+  #soBoard .dot.g { background: var(--good); border-color: var(--good); }
+  #soBoard .dot.x { background: var(--them); border-color: var(--them); }
+  #touchTac { position: absolute; top: max(12px, env(safe-area-inset-top)); right: calc(max(12px, env(safe-area-inset-right)) + 48px); pointer-events: auto; height: 40px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); font-family: var(--display); font-weight: 800; }
+  .bracket { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: 14px; overflow-x: auto; padding-bottom: 6px; }
+  .round { display: flex; flex-direction: column; gap: 8px; justify-content: space-around; min-width: 0; }
+  .tie { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; display: flex; flex-direction: column; gap: 2px; }
+  .tie.mine { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+  .tie.tbd { color: var(--muted); font-size: 13px; padding: 10px; text-align: center; }
+  .bt { display: grid; grid-template-columns: 16px 1fr auto; gap: 8px; align-items: center; font-weight: 700; font-size: 14px; }
+  .bt .shirt { width: 14px; height: 18px; border-radius: 3px; border: 1px solid rgba(255,255,255,.35); }
+  .bt.lose { opacity: .45; } .bt.win .bn { color: var(--gold); }
+  .bt .bs { font-variant-numeric: tabular-nums; } .bt small { color: var(--muted); margin-left: 3px; font-weight: 600; }
+  #confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .trophy-card { align-items: center; text-align: center; position: relative; }
+  .trophy { width: 140px; height: 175px; filter: drop-shadow(0 8px 24px rgba(240,195,90,.45)); }
   @media (max-width: 640px) {
     .matchup { grid-template-columns: 1fr; }
     .vs { display: none; }
     #radar { width: 150px; height: 97px; }
+    .sb-ment { display: none; }
     .scoreboard { font-size: 18px; }
   }
   @media (prefers-reduced-motion: reduce) { #banner, #hint { transition: none; } }
@@ -159,7 +184,10 @@
     <div class="sb-score"><span id="sbScore">0 - 0</span></div>
     <div class="sb-team"><span class="sb-red" id="sbRedA"></span><span id="sbA">AWY</span><span class="sb-kit" id="sbKitA"></span></div>
     <div class="sb-clock" id="sbClock">0'</div>
+    <div class="sb-ment" id="sbMent" title="Your team's mentality (1 / 2 / 3)">BAL</div>
   </div>
+  <div id="soBoard" class="hidden"></div>
+  <div id="stamina"><span>STAMINA</span><i><b id="staminaFill"></b></i></div>
   <div id="netStat" class="hidden"></div>
   <div id="banner"><div class="big" id="bnBig"></div><div class="small" id="bnSmall"></div></div>
   <div id="power"><i id="powerFill"></i></div>
@@ -179,6 +207,7 @@
     <button class="tbtn shoot" data-act="shoot">SHOOT</button>
   </div>
   <button id="touchPause" aria-label="Pause">❚❚</button>
+  <button id="touchTac" aria-label="Change mentality">BAL</button>
 </div>
 
 <!-- main menu -->
@@ -192,6 +221,8 @@
     </div>
     <div class="menu">
       <button class="mbtn primary" id="btnBot">Play vs Bot <small>Kick off against the CPU</small></button>
+      <button class="mbtn" id="btnCup">Champions Cup <small id="cupSub">16-club knockout</small></button>
+      <button class="mbtn" id="btnShootout">Penalty Shootout <small>Five kicks each, then sudden death</small></button>
       <button class="mbtn" id="btnOnline">Play Online <small>Invite a friend with a code</small></button>
       <button class="mbtn" id="btnControls">Controls <small>Keyboard · pad · touch</small></button>
     </div>
@@ -222,6 +253,32 @@
   </div>
 </section>
 
+<!-- Champions Cup bracket (filled in by modes.js) -->
+<section class="screen hidden" id="scrCup">
+  <div class="wrap" id="cupWrap"></div>
+</section>
+
+<!-- trophy celebration -->
+<section class="screen center hidden" id="scrTrophy">
+  <canvas id="confetti" aria-hidden="true"></canvas>
+  <div class="card trophy-card">
+    <svg class="trophy" viewBox="0 0 120 150" aria-hidden="true">
+      <defs><linearGradient id="tg" x1="0" x2="1"><stop offset="0" stop-color="#b8892a"/><stop offset=".45" stop-color="#ffe7a3"/><stop offset="1" stop-color="#a87a1f"/></linearGradient></defs>
+      <path d="M22 18 h76 v20 c0 26 -16 44 -38 48 c-22 -4 -38 -22 -38 -48z" fill="url(#tg)"/>
+      <path d="M22 26 c-16 0 -18 26 4 34" fill="none" stroke="url(#tg)" stroke-width="7"/>
+      <path d="M98 26 c16 0 18 26 -4 34" fill="none" stroke="url(#tg)" stroke-width="7"/>
+      <rect x="54" y="86" width="12" height="22" fill="url(#tg)"/>
+      <rect x="36" y="108" width="48" height="10" rx="2" fill="url(#tg)"/>
+      <rect x="30" y="118" width="60" height="18" rx="3" fill="#2a1d0e"/>
+      <text x="60" y="58" text-anchor="middle" font-family="Georgia, serif" font-size="18" fill="#7a5512">★</text>
+    </svg>
+    <div class="optlbl">Futt Champions Cup winners</div>
+    <div style="display:flex;align-items:center;gap:12px;justify-content:center"><span class="shirt" id="trophyKit" style="width:28px;height:36px;border-radius:5px;border:1px solid rgba(255,255,255,.4)"></span><h2 id="trophyTeam" style="font-size:40px"></h2></div>
+    <p class="note" id="trophyNote"></p>
+    <button class="btn primary" id="trophyDone">Back to the bracket</button>
+  </div>
+</section>
+
 <!-- online lobby (filled in by net.js) -->
 <section class="screen hidden" id="scrOnline">
   <div class="wrap" id="onlineWrap"></div>
@@ -242,9 +299,10 @@
       <span><kbd>K</kbd> / <kbd>X</kbd> (hold)</span><span>Shoot (hold for power) · hold sideways to curl a finesse shot · slide tackle when defending</span>
       <span><kbd>Q</kbd> / <kbd>Space</kbd></span><span>Switch player · hold on the ball to shield it · hold when defending to send a team-mate to press · cycle curl at free kicks</span>
       <span><kbd>P</kbd> / <kbd>Esc</kbd></span><span>Pause</span>
+      <span><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></span><span>Mentality: defensive · balanced · attacking</span>
       <span><kbd>M</kbd></span><span>Mute sound</span>
     </div>
-    <p class="note">Gamepad: left stick move, A pass, B shoot, X lob/cross, Y through ball, LB switch (hold: shield / team-mate press), RB/RT sprint (double-tap: knock-on), Start pause.<br>
+    <p class="note">Gamepad: left stick move, A pass, B shoot, X lob/cross, Y through ball, LB switch (hold: shield / team-mate press), RB/RT sprint (double-tap: knock-on), D-pad up/left-right/down mentality, Start pause.<br>
       Touch: stick on the left, buttons on the right. Pass and shoot in the direction you are holding. Hold sideways while shooting to curl it at a post.<br>
       Press Shoot or Pass as a high ball or pass arrives to head it, volley it or play it first time. Free kicks near goal and penalties: aim the gold target, set curl with Switch, hold Shoot for power.</p>
     <button class="btn primary" id="controlsBack">Got it</button>
@@ -281,6 +339,7 @@
 <script src="js/audio.js"></script>
 <script src="js/input.js"></script>
 <script src="js/net.js"></script>
+<script src="js/modes.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

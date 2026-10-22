@@ -42,6 +42,7 @@ var FC = window.FC = window.FC || {};
     if (keys[e.code]) return;         // ignore auto-repeat
     keys[e.code] = true;
     if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') sprintTap();
+    if (e.code === 'Digit1' || e.code === 'Digit2' || e.code === 'Digit3') { fire('mentality', { m: +e.code.slice(5) - 1 }); return; }
     const a = codeToAction[e.code];
     if (!a) return;
     if (a === 'shoot') startCharge(); else press(a);
@@ -62,6 +63,10 @@ var FC = window.FC = window.FC || {};
     if (now.pass && !pad.prev.pass) press('pass');
     if (now.lob && !pad.prev.lob) fire('lob');
     if (now.sprint && !pad.prev.sprint) sprintTap();
+    // D-pad: up attacking, left/right balanced, down defensive
+    const dp = btn(12) ? 2 : btn(13) ? 0 : (btn(14) || btn(15)) ? 1 : -1;
+    if (dp >= 0 && dp !== pad.prevDp) fire('mentality', { m: dp });
+    pad.prevDp = dp;
     if (now.through && !pad.prev.through) fire('through');
     if (now.switch && !pad.prev.switch) fire('switch');
     if (now.shoot && !pad.prev.shoot) startCharge();
@@ -70,7 +75,6 @@ var FC = window.FC = window.FC || {};
     pad.prev = now;
     let x = gp.axes[0] || 0, y = -(gp.axes[1] || 0);
     if (Math.hypot(x, y) < 0.18) { x = 0; y = 0; }
-    if (btn(14)) x = -1; if (btn(15)) x = 1; if (btn(12)) y = 1; if (btn(13)) y = -1;
     return { x, y, sprint: btn(5) || btn(7), shield: btn(4) };
   }
 
