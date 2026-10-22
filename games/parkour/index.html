@@ -479,6 +479,12 @@
         .go(2.6, 0, { s: 2.4, m: { axis: 'y', amp: 2.2, speed: 1.8 } }).go(2.6, 2.2, { s: 2.4, m: { axis: 'side', amp: 3.5, speed: 1.8 } }).go(3.6, 0, { s: 2.4, m: { axis: 'fwd', amp: 1.6, speed: 1.8 } }).check(3.6)
         .go(2.6, 0, { s: 2.2, m: { axis: 'side', amp: 4, speed: 2.1 } }).go(2.6, 0, { s: 2.2, m: { axis: 'y', amp: 2.5, speed: 2.1 } }).finish(2.6, 2.4),
     },
+    {
+      name: 'Sky Fortress', sky: 0xd9a98a, tip: 'Climb the walls of a floating fortress, ledge by ledge.',
+      plats: course().go(3, 0, { s: [8, 3] }).go(2.6, 1.3, { s: [3, 2] }).go(2.6, 1.3, { s: [8, 2] }).turn(90).go(2.6, 1.3, { s: 2 }).check(2.6, 0.5)
+        .stairs(4, 2.8, 1.2, 1.8).turn(90).beam(10, 0.8, 2.8).go(3, 1.2, { s: 1.8 }).check(2.8, 0.5)
+        .turn(90).stairs(4, 3, 1.2, 1.6, { type: 'crumble' }).finish(3, 0.5),
+    },
   ];
 
   // ---------- storage ----------
