@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vanguard Web · Futt Sepia Games</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="hud" class="hidden">
+  <!-- damage layers -->
+  <div id="blood"></div>
+  <div id="vignette"></div>
+  <div id="dmgDirs"></div>
+
+  <!-- sniper scope -->
+  <div id="scope"><div class="ring"></div><div class="lineH"></div><div class="lineV"></div><div class="dot"></div><div id="breath">HOLD [SHIFT] TO STEADY</div></div>
+
+  <!-- top left: radar -->
+  <div id="radarWrap"><canvas id="radar" width="200" height="200"></canvas><div id="uavTag">UAV</div></div>
+
+  <!-- top center: compass + score -->
+  <div id="topCenter">
+    <canvas id="compass" width="460" height="38"></canvas>
+    <div id="scoreBar">
+      <div class="sb you"><span id="sbYouLbl">YOU</span><b id="sbYou">0</b></div>
+      <div id="timer">10:00</div>
+      <div class="sb lead"><span id="sbLeadLbl">LEADER</span><b id="sbLead">0</b></div>
+    </div>
+    <div id="goal">FIRST TO 30</div>
+  </div>
+
+  <!-- top right: killfeed -->
+  <div id="killfeed"></div>
+
+  <!-- center -->
+  <div id="crosshair"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><i class="c"></i></div>
+  <div id="hitmarker"><i></i><i></i><i></i><i></i></div>
+  <div id="aimName"></div>
+  <div id="banner"><div id="bannerMain"></div><div id="bannerSub"></div></div>
+  <div id="popups"></div>
+  <div id="hint"></div>
+
+  <!-- bottom left: killstreaks -->
+  <div id="streaks">
+    <div class="streakRow" id="ksUav"><span class="key">4</span><span class="ksName">UAV</span><span class="ksNeed">3</span></div>
+    <div class="streakRow" id="ksAir"><span class="key">5</span><span class="ksName">AIRSTRIKE</span><span class="ksNeed">5</span></div>
+    <div id="streakBar"><div id="streakFill"></div><i style="left:60%"></i></div>
+    <div id="streakNum">STREAK 0</div>
+  </div>
+
+  <!-- bottom right: ammo -->
+  <div id="ammo">
+    <div id="wpnName">M4A1</div>
+    <div id="ammoNums"><b id="mag">30</b><span>/</span><span id="reserve">120</span></div>
+    <div id="pips"></div>
+    <div id="wpnSlots"><span data-s="0">1</span><span data-s="1">2</span><span data-s="2">3</span></div>
+  </div>
+
+  <div id="healthBar"><div id="healthFill"></div></div>
+  <div id="fps"></div>
+
+  <!-- death -->
+  <div id="death" class="hidden"><div class="by">KILLED BY</div><div id="killer"></div><div id="respawnIn"></div></div>
+
+  <!-- scoreboard -->
+  <div id="board" class="hidden glass">
+    <div class="boardHead"><span id="boardMode">FREE-FOR-ALL</span><span id="boardGoal"></span></div>
+    <table><thead><tr><th>#</th><th>PLAYER</th><th>WEAPON</th><th>K</th><th>D</th><th>K/D</th><th>SCORE</th></tr></thead><tbody id="boardBody"></tbody></table>
+  </div>
+</div>
+
+<!-- menu -->
+<div id="menu" class="screen">
+  <a class="back" href="../../index.html">◂ Games</a>
+  <div class="menuBox glass">
+    <div class="logo">VANGUARD<span>WEB</span></div>
+    <div class="tagline">Deathmatch · Map: Compound</div>
+    <div class="opts">
+      <label>Mode
+        <select id="optMode"><option value="ffa">Free-for-all</option><option value="tdm">Team deathmatch</option></select>
+      </label>
+      <label>Bots
+        <select id="optBots"><option>5</option><option selected>6</option><option>7</option></select>
+      </label>
+      <label>Difficulty
+        <select id="optDiff"><option value="0">Recruit</option><option value="1" selected>Regular</option><option value="2">Veteran</option></select>
+      </label>
+      <label>Sensitivity <output id="sensOut">1.0</output>
+        <input id="optSens" type="range" min="0.2" max="3" step="0.1" value="1">
+      </label>
+      <label>Field of view <output id="fovOut">80</output>
+        <input id="optFov" type="range" min="65" max="105" step="1" value="80">
+      </label>
+      <label>Graphics
+        <select id="optGfx"><option value="2">High</option><option value="1" selected>Medium</option><option value="0">Low</option></select>
+      </label>
+    </div>
+    <button id="playBtn" class="btn">DEPLOY</button>
+    <div id="record"></div>
+    <details class="controls">
+      <summary>Controls</summary>
+      <table>
+        <tr><td>Move / sprint</td><td>WASD / Shift</td></tr>
+        <tr><td>Crouch (slide while sprinting)</td><td>C to toggle, or hold Ctrl</td></tr>
+        <tr><td>Jump · climb ladders</td><td>Space · W at a ladder</td></tr>
+        <tr><td>Fire / aim down sights</td><td>Left / right mouse</td></tr>
+        <tr><td>Reload</td><td>R</td></tr>
+        <tr><td>Weapons</td><td>1 2 3 or mouse wheel</td></tr>
+        <tr><td>Killstreaks (UAV / airstrike)</td><td>4 / 5</td></tr>
+        <tr><td>Hold breath (scoped)</td><td>Shift</td></tr>
+        <tr><td>Scoreboard · FPS counter</td><td>Tab · F</td></tr>
+        <tr><td>Pause</td><td>Esc</td></tr>
+      </table>
+      <p class="note">Ctrl+W closes the tab in most browsers, so C is the safer crouch key.</p>
+    </details>
+    <p class="note mobile">Needs a keyboard and mouse.</p>
+  </div>
+</div>
+
+<div id="pause" class="screen hidden">
+  <div class="menuBox glass small">
+    <div class="logo small">PAUSED</div>
+    <button id="resumeBtn" class="btn">RESUME</button>
+    <button id="quitBtn" class="btn ghost">QUIT TO MENU</button>
+  </div>
+</div>
+
+<div id="end" class="screen hidden">
+  <div class="menuBox glass">
+    <div id="endTitle" class="logo">VICTORY</div>
+    <div id="endSub" class="tagline"></div>
+    <div id="endStats"></div>
+    <button id="againBtn" class="btn">PLAY AGAIN</button>
+    <button id="menuBtn" class="btn ghost">MAIN MENU</button>
+  </div>
+</div>
+
+<div id="loading" class="screen hidden"><div class="logo small">BUILDING COMPOUND…</div></div>
+
+<script src="../shared/lib/three.min.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/physics.js"></script>
+<script src="js/textures.js"></script>
+<script src="js/map.js"></script>
+<script src="js/nav.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/weapons.js"></script>
+<script src="js/player.js"></script>
+<script src="js/bots.js"></script>
+<script src="js/hud.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
