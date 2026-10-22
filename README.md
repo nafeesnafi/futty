@@ -69,6 +69,7 @@ level as fast as you can:
 17. **Tightrope**: even thinner beams, and some of them crumble
 18. **Windmill**: pairs of platforms swing past each other. Time it right
 19. **Twin Towers**: climb one tower, cross the bridge, climb the next
+20. **Elevator Shaft**: lifts take you up between ledges. Mind the timing
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 

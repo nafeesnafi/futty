@@ -312,6 +312,13 @@
         .beam(12, 1.2, 2.5).go(2.5)
         .spiral(10, 5, 1, 2.2, 2.6, -1, i => i === 5 ? 'check' : null).finish(2.5, 0.5),
     },
+    {
+      name: 'Elevator Shaft', sky: 0xb8b0a2, tip: 'Lifts take you up between ledges. Mind the timing.',
+      plats: course().go(2.5).go(2.5, 0, { m: { axis: 'y', amp: 2.5, speed: 0.9 } }).go(2.5, 2.5).check()
+        .turn(90).go(2.5, 0, { m: { axis: 'y', amp: 2.5, speed: 1.1 } }).go(2.5, 2.5).turn(90)
+        .go(2.5, 0, { m: { axis: 'y', amp: 2.5, speed: 1.2 } }).go(2.5, 2.5).check()
+        .turn(-90).go(2.5, 0, { m: { axis: 'y', amp: 2.8, speed: 1.3 } }).finish(2.5, 2.6),
+    },
   ];
 
   // ---------- storage ----------
