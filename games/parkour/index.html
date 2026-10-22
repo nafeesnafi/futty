@@ -390,6 +390,12 @@
         .turn(-90).pad(2.5, -1).pad(3, 4).turn(-90).pad(3, 3).go(3.5, 4.5).check()
         .turn(90).go(2.5).pad(2.5, -2).go(3.5, 5, { s: 2.5 }).pad(2.5).finish(3.5, 4.5),
     },
+    {
+      name: 'Storm Front', sky: 0xb8b0a2, tip: 'A grey sky and restless platforms in every direction.',
+      plats: course().go(2.5).movers(2, 'side', 3, 1.5, 2.6, 2.4).go(2.6, 0, { m: { axis: 'y', amp: 2, speed: 1.5 } }).go(2.6, 2).check()
+        .go(3.5, 0, { m: { axis: 'fwd', amp: 1.5, speed: 1.6 } }).movers(2, 'side', 3.5, 1.7, 3, 2.4).check()
+        .crumbles(3, 2.8, 0.3, 2.4).go(2.8, 0, { m: { axis: 'y', amp: 2.2, speed: 1.7 } }).finish(2.8, 2.2),
+    },
   ];
 
   // ---------- storage ----------

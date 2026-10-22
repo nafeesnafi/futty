@@ -82,6 +82,7 @@ level as fast as you can:
 30. **Rooftops**: leap across rooftops of different heights
 31. **Sunset Sprint**: narrow beams with long jumps in between. Fast and risky
 32. **Bounce Maze**: pads go up, down and around the corner
+33. **Storm Front**: a grey sky and restless platforms in every direction
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 
