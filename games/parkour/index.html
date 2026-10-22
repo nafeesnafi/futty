@@ -349,6 +349,13 @@
         .movers(2, 'side', 3.5, 1.4, 2.6, 2.6).crumbles(3, 2.8).pad(2.6).check(3.5, 4.5)
         .zig(4, 2.8, 0.4, 40, 2.2, { type: 'crumble' }).finish(),
     },
+    {
+      name: 'Staircase to Heaven', sky: 0xf0dcc4, tip: 'One long climb. Don\'t look back down.',
+      plats: course().stairs(5, 2.2, 1.2, 2.6).check(2.2, 1)
+        .turn(90).stairs(5, 2.2, 1.2, 2.4).check(2.2, 1)
+        .turn(90).stairs(5, 2.4, 1.3, 2.2).check(2.2, 1)
+        .turn(90).stairs(4, 2.4, 1.3, 2).finish(2.5, 1),
+    },
   ];
 
   // ---------- storage ----------

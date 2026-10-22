@@ -75,6 +75,7 @@ level as fast as you can:
 23. **Sky Highway**: a fast, straight run. Sprint the whole way for a great time
 24. **Pendulum Run**: fast swinging platforms. Watch the rhythm before jumping
 25. **The Gauntlet**: crumble, bounce, move, repeat. No time to rest
+26. **Staircase to Heaven**: one long climb. Don't look back down
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 
