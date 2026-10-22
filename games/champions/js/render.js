@@ -11,6 +11,45 @@ var FC = window.FC = window.FC || {};
   const players = [];               // 22 player rigs (0-10 home, 11-21 away)
   const camPos = new THREE.Vector3(0, 30, 50), camLook = new THREE.Vector3();
   let markers = [];
+  const flags = [];                 // supporter flags waved in the stands
+  let flagTex = null, clockT = 0;
+
+  // Fans hold flags on poles above the crowd. Positions are in a stand's local frame:
+  // x runs along the stand, v runs up the slope (the stand plane is tilted 0.6 rad back from vertical).
+  function addFlags(grp, len) {
+    if (!FC.FAN_FLAGS || !FC.FAN_FLAGS.length) return;
+    if (!flagTex) flagTex = FC.FAN_FLAGS.map(src => { const t = new THREE.TextureLoader().load(src); t.colorSpace = THREE.SRGBColorSpace; return t; });
+    const count = Math.round(len / 13), poleMat = new THREE.MeshLambertMaterial({ color: 0xdddddd });
+    for (let i = 0; i < count; i++) {
+      const x = -len / 2 + (i + 0.5) * (len / count) + (Math.random() - 0.5) * 4;
+      const v = [-15.5, -12.5, -14][i % 3] + (Math.random() - 0.5);   // front rows, so the match camera sees them
+      const baseY = 9.5 + Math.cos(-Math.PI / 2 + 0.6) * v, baseZ = -8 + Math.sin(-Math.PI / 2 + 0.6) * v;
+      const W = 5.4, H = 3.6;
+      const geo = new THREE.PlaneGeometry(W, H, 14, 6);
+      const mat = new THREE.MeshLambertMaterial({ map: flagTex[flags.length % flagTex.length], side: THREE.DoubleSide });
+      const flag = new THREE.Mesh(geo, mat);
+      flag.position.set(x + W / 2, baseY + 3.6, baseZ + 0.8);
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 5.6), poleMat);
+      pole.position.set(x, baseY + 2.6, baseZ + 0.8);
+      grp.add(flag, pole);
+      flags.push({ flag, pole, base: geo.attributes.position.array.slice(), W, y0: flag.position.y, py0: pole.position.y, phase: Math.random() * 6.28, speed: 2.5 + Math.random() * 1.5 });
+    }
+  }
+
+  function waveFlags(dt) {
+    clockT += dt;
+    for (const f of flags) {
+      const pos = f.flag.geometry.attributes.position, a = pos.array, b = f.base;
+      for (let k = 0; k < a.length; k += 3) {
+        const along = (b[k] + f.W / 2) / f.W;           // 0 at the pole, 1 at the free edge
+        a[k + 2] = Math.sin(b[k] * 1.4 - clockT * f.speed + f.phase) * 0.35 * along;
+        a[k + 1] = b[k + 1] - along * along * 0.25;    // free edge droops a little
+      }
+      pos.needsUpdate = true;
+      const lift = Math.max(0, Math.sin(clockT * 1.3 + f.phase)) * 0.6;   // fans raise and lower the flags
+      f.flag.position.y = f.y0 + lift; f.pole.position.y = f.py0 + lift;
+    }
+  }
 
   function canvasTex(w, h, draw, repeat) {
     const c = document.createElement('canvas'); c.width = w; c.height = h;
@@ -126,6 +165,7 @@ var FC = window.FC = window.FC || {};
       const back = new THREE.Mesh(new THREE.BoxGeometry(s.len, 24, 1), roofMat);
       back.position.set(0, 11, -22);
       grp.add(stand, roof, back);
+      addFlags(grp, s.len);
       grp.position.set(...s.pos); grp.rotation.y = s.rot;
       scene.add(grp);
     }
@@ -298,6 +338,7 @@ var FC = window.FC = window.FC || {};
 
     // view = { ball:{x,y,z,vx,vz}, players:[{x,z,face,spd,kick}], active:[homeIdx|-1, awayIdx|-1], flip }
     draw(view, dt) {
+      waveFlags(dt);
       const b = view.ball;
       ballMesh.position.set(b.x, b.y + 0.11, b.z);
       const sp = Math.hypot(b.vx || 0, b.vz || 0);
