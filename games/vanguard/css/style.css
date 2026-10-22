@@ -359,3 +359,15 @@ body.touch .note.mobile { display: block; color: var(--accent); }
 #tEdit input[type=range] { width: 110px; accent-color: var(--accent); }
 #tEdit button { font: 700 14px Rajdhani, sans-serif; letter-spacing: 2px; padding: 6px 14px; border: 1px solid var(--line); background: transparent; color: var(--hud); }
 #tEdit #tEdDone { background: var(--accent); color: #0c0f0d; border: 0; }
+
+/* ---------- voice ---------- */
+.voiceRow { align-items: center; justify-content: center; margin-top: 8px; }
+.voiceRow span { letter-spacing: 2px; color: var(--dim); font-weight: 600; font-size: 13px; }
+.voiceRow select { width: auto; }
+#voiceList { position: absolute; left: 22px; top: 236px; display: flex; flex-direction: column; gap: 3px; }
+.vTalk { background: rgba(0,0,0,.5); padding: 2px 10px; font-weight: 700; font-size: 15px; border-left: 3px solid var(--ally); }
+.vTalk.me { border-left-color: var(--accent); color: var(--accent); }
+body.touch #voiceList { left: 150px; top: 10px; }
+#tMic { left: calc(16px + env(safe-area-inset-left)); top: 30%; width: 56px; height: 56px; display: none; border-color: rgba(79,182,255,.7); }
+#tMic.show { display: flex; }
+#tMic.held { background: rgba(79,182,255,.55); }

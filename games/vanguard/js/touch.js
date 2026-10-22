@@ -26,6 +26,7 @@
     <button class="tb pill" id="tAir">AIRSTRIKE</button>
     <button class="tb sq" id="tPause">❚❚</button>
     <button class="tb sq" id="tBoard">☰</button>
+    <button class="tb" id="tMic">MIC</button>
     <div id="tEdit">
       <div class="tEdTitle">Drag buttons to move them · tap one to select it, then resize</div>
       <label>Size <input type="range" id="tEdSize" min="0.6" max="1.7" step="0.05" value="1"></label>
@@ -98,7 +99,7 @@
   // ---- buttons ----
   // ---- layout (custom button positions/sizes, saved per device) ----
   const LAYOUT_KEY = 'fsg.vanguard.touchLayout';
-  const EDITABLE = ['tFire', 'tAds', 'tJump', 'tCrouch', 'tReload', 'tSwap', 'tSteady', 'tUav', 'tAir', 'tPause', 'tBoard'];
+  const EDITABLE = ['tFire', 'tAds', 'tJump', 'tCrouch', 'tReload', 'tSwap', 'tSteady', 'tUav', 'tAir', 'tPause', 'tBoard', 'tMic'];
   let layout = {};
   try { layout = JSON.parse(localStorage.getItem(LAYOUT_KEY)) || {}; } catch (_) { layout = {}; }
   let editing = false, sel = null, drag = null;
@@ -170,6 +171,7 @@
   btn('tUav', () => { inp.pressed.Digit4 = true; });
   btn('tAir', () => { inp.pressed.Digit5 = true; });
   btn('tPause', () => { G.setPaused(true); });
+  btn('tMic', () => { if (VG.Voice) VG.Voice.setPtt(true); }, () => { if (VG.Voice) VG.Voice.setPtt(false); });
   let board = false;
   btn('tBoard', () => { board = !board; VG.HUD.showBoard(board); });
 

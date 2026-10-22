@@ -47,6 +47,7 @@
   function sendTo(id, m) { sendConn(N.conns.get(id), m); }
 
   function destroy() {
+    if (VG.Voice) VG.Voice.reset();
     for (const c of N.conns.values()) { try { c.close(); } catch (_) { /* ignore */ } }
     try { if (N.host) N.host.close(); } catch (_) { /* ignore */ }
     try { if (N.peer) N.peer.destroy(); } catch (_) { /* ignore */ }
@@ -59,10 +60,11 @@
     destroy();
     if (!window.Peer) return fail('Online play needs the PeerJS library, which didn\'t load.');
     N.role = 'host'; N.code = makeCode(); N.size = +$('onSize').value; N.me = 'h'; N.error = '';
-    N.players = [{ id: 'h', name: myName(), team: 0 }];
+    N.players = [{ id: 'h', name: myName(), team: 0, pid: PREFIX + N.code }];
     N.nextId = 1;
     status('Creating lobby…'); render();
     const peer = N.peer = new Peer(PREFIX + N.code, peerOptions());
+    if (VG.Voice) VG.Voice.attach(peer);
     peer.on('open', () => { status(''); render(); });
     peer.on('connection', (conn) => {
       conn.on('open', () => {
@@ -81,9 +83,10 @@
 
   function teamCount(t) { return N.players.filter(p => p.team === t).length; }
   function sendLobby() {
-    const base = { t: 'lobby', size: N.size, code: N.code, players: N.players.map(p => ({ id: p.id, name: p.name, team: p.team })) };
+    const base = { t: 'lobby', size: N.size, code: N.code, players: N.players.map(p => ({ id: p.id, name: p.name, team: p.team, pid: p.pid })) };
     for (const id of N.conns.keys()) sendTo(id, Object.assign({ you: id }, base));
     render();
+    if (VG.Voice) VG.Voice.sync();
   }
   function rebalance() {
     // keep every team within the format's size
@@ -100,7 +103,7 @@
         if (m.v !== PROTOCOL) { sendTo(id, { t: 'reject' }); return; }
         if (pl) return;
         const team = teamCount(0) <= teamCount(1) ? 0 : 1;
-        N.players.push({ id, name: str(m.name) || 'Player', team });
+        N.players.push({ id, name: str(m.name) || 'Player', team, pid: c ? c.peer : null });
         sendLobby(); return;
       }
       case 'team':
@@ -156,6 +159,7 @@
     if (!window.Peer) return fail('Online play needs the PeerJS library, which didn\'t load.');
     N.role = 'guest'; N.code = code; N.error = ''; status('Connecting…'); render();
     const peer = N.peer = new Peer(undefined, peerOptions());
+    if (VG.Voice) VG.Voice.attach(peer);
     peer.on('open', () => {
       const conn = N.host = peer.connect(PREFIX + code, { reliable: true, serialization: 'json' });
       conn.on('open', () => { conn.send({ t: 'hello', v: PROTOCOL, name: myName() }); status(''); });
@@ -181,7 +185,7 @@
       case 'full': return fail('That lobby is full.');
       case 'busy': return fail('That lobby is already in a match. Try again when it ends.');
       case 'reject': return fail('The host is on a different version of the game. Both of you should reload the page.');
-      case 'lobby': N.players = m.players || []; N.size = m.size; N.me = m.you; if (!N.inMatch) render(); return;
+      case 'lobby': N.players = m.players || []; N.size = m.size; N.me = m.you; if (!N.inMatch) render(); if (VG.Voice) VG.Voice.sync(); return;
       case 'start': return startMatch(m.roster, m.you, m.size, m.diff);
     }
     if (!N.inMatch || !G.running) return;

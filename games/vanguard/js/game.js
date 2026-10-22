@@ -84,6 +84,7 @@
     ['jump', 'Jump · climb', 'Space'], ['fire', 'Fire', 'Mouse0'], ['ads', 'Aim down sights', 'Mouse2'], ['reload', 'Reload', 'KeyR'],
     ['w1', 'Assault rifle', 'Digit1'], ['w2', 'SMG', 'Digit2'], ['w3', 'Sniper rifle', 'Digit3'],
     ['uav', 'UAV', 'Digit4'], ['air', 'Airstrike', 'Digit5'], ['board', 'Scoreboard (hold)', 'Tab'], ['fps', 'FPS counter', 'KeyF'],
+    ['talk', 'Push to talk (online)', 'KeyV'],
   ];
   const DEF = {}; for (const [a, , c] of ACTIONS) DEF[a] = c;
   const DEFAULT_CODES = new Set(Object.values(DEF));
@@ -124,6 +125,7 @@
     const prev = G.binds[action];
     for (const a in G.binds) if (a !== action && G.binds[a] === code) G.binds[a] = prev; // swap on conflict
     G.binds[action] = code; capture = null; rebuildBinds(); renderKeys();
+    if (VG.Voice) VG.Voice.render();
   }
   addEventListener('keydown', (e) => {
     if (capture) { e.preventDefault(); if (e.code === 'Escape') { capture = null; renderKeys(); } else bindTo(capture, e.code); return; }
@@ -161,7 +163,7 @@
       ['Jump · climb ladders', `${k('jump')} · ${k('forward')} at a ladder`],
       ['Fire / aim down sights', `${k('fire')} / ${k('ads')}`], ['Reload', k('reload')],
       ['Weapons', `${k('w1')} ${k('w2')} ${k('w3')} or mouse wheel`], ['Killstreaks (UAV / airstrike)', `${k('uav')} / ${k('air')}`],
-      ['Hold breath (scoped)', k('sprint')], ['Scoreboard · FPS counter', `${k('board')} · ${k('fps')}`], ['Pause', 'ESC'],
+      ['Hold breath (scoped)', k('sprint')], ['Push to talk (online)', k('talk')], ['Scoreboard · FPS counter', `${k('board')} · ${k('fps')}`], ['Pause', 'ESC'],
     ].map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
   }
   G.renderKeys = renderKeys;
