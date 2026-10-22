@@ -356,6 +356,12 @@
         .turn(90).stairs(5, 2.4, 1.3, 2.2).check(2.2, 1)
         .turn(90).stairs(4, 2.4, 1.3, 2).finish(2.5, 1),
     },
+    {
+      name: 'Floating Islands', sky: 0xdcd8cc, tip: 'Big islands, big gaps. Sprint and leap between them.',
+      plats: course().go(3.5, 0, { s: 6 }).go(4, 0.5, { s: 5 }).go(4.2, 0, { s: 5, dir: 30 }).check(4)
+        .go(4.2, 0, { s: 5, dir: -30 }).go(4.4, 0.4, { s: 4.5 }).go(4.4, 0, { s: 4.5, dir: 40 }).check(4.2)
+        .go(4.5, 0, { s: 4, dir: -30 }).finish(4.5),
+    },
   ];
 
   // ---------- storage ----------

@@ -76,6 +76,7 @@ level as fast as you can:
 24. **Pendulum Run**: fast swinging platforms. Watch the rhythm before jumping
 25. **The Gauntlet**: crumble, bounce, move, repeat. No time to rest
 26. **Staircase to Heaven**: one long climb. Don't look back down
+27. **Floating Islands**: big islands, big gaps. Sprint and leap between them
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 
