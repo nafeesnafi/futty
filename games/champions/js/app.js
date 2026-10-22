@@ -214,7 +214,8 @@ var FC = window.FC = window.FC || {};
       if (e.e === 'goal' && S.role !== 'demo') { S.goalAt = performance.now() / 1000; S.goalScorer = e.id; }
       switch (e.e) {
         case 'kick': FC.Audio.kick(e.power); break;
-        case 'post': FC.Audio.post(); FC.Audio.oooh(); break;
+        case 'post': FC.Audio.post(); break;
+        case 'nearmiss': if (S.role !== 'demo') FC.Audio.nearMiss(); break;
         case 'save': FC.Audio.save(); break;
         case 'tackle': if (e.ok) FC.Audio.tackle(); break;
         case 'whistle': if (S.role !== 'demo') FC.Audio.whistle(e.short ? false : true); break;
@@ -393,6 +394,13 @@ var FC = window.FC = window.FC || {};
         while (S.history.length && S.history[0].t < nowS - 4) S.history.shift();
       }
       $('replayTag').classList.toggle('show', !!extra.replay);
+      // crowd noise follows danger: how close the ball is to either goal while play is live
+      if (S.role !== 'demo') {
+        const bb = S.view.ball, HLp = FC.PITCH.HL;
+        const near = Math.min(Math.hypot(bb.x - HLp, bb.z), Math.hypot(bb.x + HLp, bb.z));
+        const live = S.hud && (S.hud.phase === 'play' || S.hud.phase === 'setpiece');
+        FC.Audio.update(dt, live ? Math.max(0, Math.min(1, 1 - (near - 8) / 30)) : 0);
+      }
       FC.Render.draw(Object.assign({}, shown, extra, { flip: S.myTeam === 1, fk, active: S.role === 'demo' || extra.replay ? [-1, -1] : shown.active }), dt);
       if (S.role !== 'demo') { updateHud(); drawRadar(S.view); }
     }

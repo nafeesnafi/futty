@@ -1045,6 +1045,8 @@ var FC = window.FC = window.FC || {};
           return;
         }
         const defending = 1 - scoringTeam;
+        // a shot that just missed: the crowd gasps
+        if (b.shot && Math.abs(b.z) < GOAL_W / 2 + 2.5 && b.y < GOAL_H + 2) this.emit('nearmiss');
         this.emit('out');
         if (b.lastTeam === defending) this.startSetpiece('corner', scoringTeam, s * (HL - 0.3), Math.sign(b.z || 1) * (HW - 0.3));
         else this.startSetpiece('goalkick', defending, s * (HL - 5.5), Math.sign(b.z || 1) * 4);
