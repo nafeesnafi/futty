@@ -73,7 +73,7 @@
       <div class="stat"><b id="stGames">4</b><span>Games</span></div>
       <div class="stat"><b id="stWins">0</b><span>Football wins</span></div>
       <div class="stat"><b id="stBest">—</b><span>Best drive</span></div>
-      <div class="stat"><b id="stLevels">0/3</b><span>Parkour levels</span></div>
+      <div class="stat"><b id="stLevels">0/53</b><span>Parkour levels</span></div>
     </div>
   </header>
 
@@ -164,7 +164,7 @@
       <div class="body">
         <h4>Sky Runner <span class="new">3D</span></h4>
         <p>3D parkour. Run, jump and climb across floating platforms in the clouds and reach the golden flag.</p>
-        <div class="tags"><span class="tag">Platformer</span><span class="tag">3 levels</span><span class="tag">Time trial</span></div>
+        <div class="tags"><span class="tag">Platformer</span><span class="tag">53 levels</span><span class="tag">Time trial</span></div>
         <div class="foot"><span class="rec" id="recParkour">No levels cleared</span><span class="play">Play ▸</span></div>
       </div>
     </a>
@@ -199,12 +199,13 @@
   }
   const ch = read('fsg.champions', null);
   if (ch) document.getElementById('recChampions').textContent = `W ${ch.w} · D ${ch.d} · L ${ch.l}`;
+  const PK_LEVELS = 53;
   const pk = read('fsg.parkour', null);
   if (pk) {
     const done = Object.keys(pk).length;
     const total = Object.values(pk).reduce((a, b) => a + b, 0);
-    document.getElementById('stLevels').textContent = `${done}/3`;
-    document.getElementById('recParkour').textContent = done === 3 ? `All cleared · ${total.toFixed(1)}s total` : `${done}/3 levels cleared`;
+    document.getElementById('stLevels').textContent = `${done}/${PK_LEVELS}`;
+    document.getElementById('recParkour').textContent = done >= PK_LEVELS ? `All cleared · ${total.toFixed(1)}s total` : `${done}/${PK_LEVELS} levels cleared`;
   }
 </script>
 </body>
