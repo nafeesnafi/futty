@@ -239,7 +239,7 @@
     // window ledges / trims for detail
     for (const z0 of [-24, -16, -8, 4, 12, 20]) {
       visBox(24, 3.6, z0, 24.12, 3.72, z0 + 3, 'dark', { noAO: true });
-      visBox(19.88, 3.6, z0, 20, 3.72, z0 + 3, 'dark', { noAO: true });
+      if (z0 !== -16) visBox(19.88, 3.6, z0, 20, 3.72, z0 + 3, 'dark', { noAO: true }); // -16: photo billboard there
     }
     // balcony (sniper nest) along the east wall
     B(39, -14, 45, 14, 3.3, 3.6, 'metal', { walk: true, tex: 2, noAO: true });
@@ -279,6 +279,31 @@
     }
 
     flush();
+
+    // ===== photo billboards and posters =====
+    if (VG.POSTERS) {
+      const loader = new THREE.TextureLoader(), texCache = {};
+      const frameMat = new THREE.MeshStandardMaterial({ color: 0x2a2b2c, roughness: 0.6, metalness: 0.4 });
+      const poster = (key, x, y, z, w, rotY) => {
+        const P0 = VG.POSTERS[key]; if (!P0) return;
+        let tex = texCache[key];
+        if (!tex) { tex = texCache[key] = loader.load(P0.src); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4; }
+        const h = w * P0.h / P0.w, g = new THREE.Group();
+        const pic = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({
+          map: tex, roughness: 0.55, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.22 }));
+        pic.position.z = 0.04;
+        const frame = new THREE.Mesh(new THREE.BoxGeometry(w + 0.24, h + 0.24, 0.06), frameMat);
+        frame.castShadow = frame.receiveShadow = true;
+        g.add(frame, pic); g.position.set(x, y, z); g.rotation.y = rotY;
+        scene.add(g);
+      };
+      poster('portrait', 19.94, 3.6, -14, 4.2, -Math.PI / 2);   // courtyard billboard on the building block
+      poster('jersey', 0, 3.3, -54.94, 8, 0);                   // north wall, facing the north spawn area
+      poster('jersey', -10, 3.3, 54.94, 8, Math.PI);            // south wall
+      poster('portrait', 44.94, 3.2, -32, 3.6, -Math.PI / 2);   // alley wall, seen from the sniper balcony
+      poster('portrait', -43.2, 2.9, -29.97, 2.4, 0);           // inside the warehouse
+      poster('jersey', -24.0 + 0.04, 3.4, 23, 3.6, Math.PI / 2); // warehouse outer wall, facing the courtyard
+    }
 
     // barrels as one instanced mesh
     const bg = new THREE.CylinderGeometry(0.3, 0.3, 0.9, 14);

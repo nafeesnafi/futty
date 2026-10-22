@@ -61,6 +61,7 @@
 
   <div id="healthBar"><div id="healthFill"></div></div>
   <div id="fps"></div>
+  <div id="voiceList"></div>
 
   <!-- death -->
   <div id="death" class="hidden"><div class="by">KILLED BY</div><div id="killer"></div><div id="respawnIn"></div></div>
@@ -138,6 +139,11 @@
         <select id="onSize2" aria-label="Format"><option value="1">1v1</option><option value="2">2v2</option><option value="4">4v4</option></select>
       </div>
       <button id="onSwitch" class="btn ghost">SWITCH TEAM</button>
+      <div class="onRow voiceRow">
+        <span>VOICE</span>
+        <select id="onMic" aria-label="Voice chat"><option value="ptt">Push to talk</option><option value="open">Open mic</option><option value="listen">Listen only</option><option value="off">Off</option></select>
+      </div>
+      <div id="onMicNote" class="note"></div>
       <button id="onStart" class="btn">START MATCH</button>
       <div id="onWait" class="note">Waiting for the host to start the match…</div>
     </div>
@@ -182,6 +188,7 @@
 <script src="js/audio.js"></script>
 <script src="js/physics.js"></script>
 <script src="js/textures.js"></script>
+<script src="js/posters.js"></script>
 <script src="js/map.js"></script>
 <script src="js/nav.js"></script>
 <script src="js/fx.js"></script>
@@ -192,5 +199,6 @@
 <script src="js/game.js"></script>
 <script src="js/touch.js"></script>
 <script src="js/net.js"></script>
+<script src="js/voice.js"></script>
 </body>
 </html>

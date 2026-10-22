@@ -119,6 +119,11 @@ shooting feels instant. Kill goal: 15 (1v1), 20 (2v2), 30 (4v4). Like Futt Champ
 browsers directly over WebRTC using the free PeerJS server, so it needs a normal web address, and the same
 `?peerhost=…` parameters work for a self-hosted PeerServer.
 
+**Voice chat.** In an online lobby, pick *Push to talk* (hold V, or the MIC button on phones), *Open mic*,
+*Listen only* or *Off*. Everyone hears everyone in the lobby; in a match you only hear your own team. Each
+pair of players talks over a direct WebRTC audio call, and the HUD shows who is talking. The browser asks
+for microphone permission, and voice needs the game served over https.
+
 **Custom controls.** On PC, *Controls* lets you rebind every action to any key or mouse button (saved in
 the browser). On phones, *Touch layout* lets you drag every button where you want it, resize it and set
 the button opacity.
