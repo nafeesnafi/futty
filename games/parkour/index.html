@@ -337,6 +337,12 @@
         .beam(16, 2, 4).go(4.2, 0.4).beam(16, 2, 4.2).check(4)
         .beam(20, 1.6, 4.2).finish(4),
     },
+    {
+      name: 'Pendulum Run', sky: 0xe6c2b4, tip: 'Fast swinging platforms. Watch the rhythm before jumping.',
+      plats: course().go(2.5).movers(3, 'side', 4, 1.8, 2.5, 2.6).check()
+        .go(2.5, 0, { m: { axis: 'y', amp: 2, speed: 1.6 } }).go(2.5, 2).movers(3, 'side', 4, 2, 2.5, 2.4).check()
+        .movers(3, 'fwd', 1.2, 1.8, 3, 2.6).finish(3.5),
+    },
   ];
 
   // ---------- storage ----------
