@@ -93,6 +93,7 @@ level as fast as you can:
 41. **Pillar Hop**: tall pillars at different heights. Every jump is up or down
 42. **Rush Hour**: fast movers in both directions. Don't get left behind
 43. **Crumbling Bridge**: a long bridge falling apart under your feet. Do not stop
+44. **Moonrise**: night falls. Climb toward the moon on lifts and pads
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 
