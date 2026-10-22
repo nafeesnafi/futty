@@ -282,6 +282,12 @@
         .go(4, 0, { m: { axis: 'fwd', amp: 2.2, speed: 1 } }).go(4.5, 0, { m: { axis: 'fwd', amp: 2.2, speed: 1, phase: Math.PI } }).go(4).check()
         .movers(3, 'side', 3, 1.1, 2.5).finish(),
     },
+    {
+      name: 'Gentle Descent', sky: 0xdcd8cc, tip: 'Down we go. Big drops are safe, just land on the platform.',
+      plats: course().go(2.5, -1.5).go(3, -1.5).go(3, -1.5).check(2.5, -1)
+        .zig(4, 2.8, -0.8, 35, 2.6).check(2.5, -1)
+        .crumbles(3, 2.8, -0.6, 2.6).go(3, -1).finish(3, -1),
+    },
   ];
 
   // ---------- storage ----------
