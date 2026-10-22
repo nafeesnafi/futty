@@ -129,17 +129,28 @@ var FC = window.FC = window.FC || {};
       grp.position.set(...s.pos); grp.rotation.y = s.rot;
       scene.add(grp);
     }
-    // advertising boards
-    const ads = canvasTex(1024, 64, (g, w, h) => {
-      const grd = g.createLinearGradient(0, 0, w, 0); grd.addColorStop(0, '#0b1d4d'); grd.addColorStop(1, '#13307a');
-      g.fillStyle = grd; g.fillRect(0, 0, w, h);
-      g.fillStyle = '#ffffff'; g.font = 'bold 40px system-ui, sans-serif'; g.textBaseline = 'middle';
-      g.fillText('FUTT SEPIA GAMES', 30, h / 2 + 2); g.fillStyle = '#e9c46a'; g.fillText('★ CHAMPIONS NIGHT', 540, h / 2 + 2);
-    }, [6, 1]);
-    const adMat = new THREE.MeshBasicMaterial({ map: ads });
+    // pitch-side sponsor boards: two messages side by side, tiled along each board
+    const drawAds = (g, w, h) => {
+      const half = w / 2;
+      const ig = g.createLinearGradient(0, 0, half, 0);
+      ig.addColorStop(0, '#5b2bc4'); ig.addColorStop(0.5, '#d62976'); ig.addColorStop(1, '#f58529');
+      g.fillStyle = ig; g.fillRect(0, 0, half, h);
+      g.fillStyle = '#e62117'; g.fillRect(half, 0, half, h);
+      g.fillStyle = '#ffffff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      const fit = (text, x) => {
+        let size = 40;
+        do { g.font = `800 ${size}px system-ui, "Segoe UI", Roboto, sans-serif`; size -= 1; } while (g.measureText(text).width > half - 60 && size > 12);
+        g.fillText(text, x, h / 2 + 2);
+      };
+      fit('FOLLOW @NACHOFEES ON INSTAGRAM', half / 2);
+      fit('SUBSCRIBE TO MONTASIR MUSTAFA ON YOUTUBE', half + half / 2);
+    };
+    // keep the lettering in proportion: one 2048x64 tile spans 1.4 m x 45 m of board
+    const adMat = len => new THREE.MeshBasicMaterial({ map: canvasTex(2048, 64, drawAds, [Math.max(1, Math.round(len / 45)), 1]) });
     for (const [x, z, w, r] of [[0, -HW - 4, 120, 0], [0, HW + 4, 120, Math.PI], [-HL - 4, 0, 76, Math.PI / 2], [HL + 4, 0, 76, -Math.PI / 2]]) {
-      const b = new THREE.Mesh(new THREE.BoxGeometry(w, 0.9, 0.2), [adMat, adMat, adMat, adMat, adMat, adMat]);
-      b.position.set(x, 0.45, z); b.rotation.y = r; scene.add(b);
+      const m = adMat(w);
+      const b = new THREE.Mesh(new THREE.BoxGeometry(w, 1.4, 0.2), [m, m, m, m, m, m]);
+      b.position.set(x, 0.7, z); b.rotation.y = r; scene.add(b);
     }
     // floodlight towers
     const lampMat = new THREE.MeshBasicMaterial({ color: 0xfff6d8 });
