@@ -437,6 +437,12 @@
         .turn(90).beam(10, 0.8, 3).go(3.5, 0, { m: { axis: 'fwd', amp: 1.5, speed: 1.4 } }).go(3.5).check()
         .turn(-90).stairs(4, 2.6, 1.1, 2.2).finish(3),
     },
+    {
+      name: 'Pillar Hop', sky: 0x9c8aa0, tip: 'Tall pillars at different heights. Every jump is up or down.',
+      plats: course().go(2.5, 1.2, { s: 2, h: 8 }).go(2.6, 1.2, { s: 2, h: 8 }).go(3, -1.5, { s: 2, h: 8 }).go(2.6, 1.3, { s: 2, h: 8 }).check(2.6, 1)
+        .zig(5, 2.8, 0.8, 35, 1.8, { h: 8 }).check(2.6, 0.5)
+        .go(3.5, -2, { s: 1.6, h: 8 }).go(2.6, 1.3, { s: 1.6, h: 8 }).go(2.6, 1.3, { s: 1.6, h: 8 }).finish(3, 0.5),
+    },
   ];
 
   // ---------- storage ----------
