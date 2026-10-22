@@ -25,7 +25,13 @@
     <button class="tb pill" id="tUav">UAV</button>
     <button class="tb pill" id="tAir">AIRSTRIKE</button>
     <button class="tb sq" id="tPause">❚❚</button>
-    <button class="tb sq" id="tBoard">☰</button>`;
+    <button class="tb sq" id="tBoard">☰</button>
+    <div id="tEdit">
+      <div class="tEdTitle">Drag buttons to move them · tap one to select it, then resize</div>
+      <label>Size <input type="range" id="tEdSize" min="0.6" max="1.7" step="0.05" value="1"></label>
+      <label>Opacity <input type="range" id="tEdOp" min="0.25" max="1" step="0.05" value="1"></label>
+      <button id="tEdReset">RESET</button><button id="tEdDone">SAVE</button>
+    </div>`;
   document.body.appendChild(root);
   const rot = document.createElement('div');
   rot.id = 'rotate'; rot.innerHTML = '<div>⟳</div>Turn your phone sideways to play';
@@ -90,10 +96,63 @@
   right.addEventListener('pointerup', lookEnd); right.addEventListener('pointercancel', lookEnd);
 
   // ---- buttons ----
+  // ---- layout (custom button positions/sizes, saved per device) ----
+  const LAYOUT_KEY = 'fsg.vanguard.touchLayout';
+  const EDITABLE = ['tFire', 'tAds', 'tJump', 'tCrouch', 'tReload', 'tSwap', 'tSteady', 'tUav', 'tAir', 'tPause', 'tBoard'];
+  let layout = {};
+  try { layout = JSON.parse(localStorage.getItem(LAYOUT_KEY)) || {}; } catch (_) { layout = {}; }
+  let editing = false, sel = null, drag = null;
+  function applyLayout() {
+    for (const id of EDITABLE) {
+      const el = $(id), L = layout[id];
+      if (L) {
+        el.style.left = (L.x * 100) + '%'; el.style.top = (L.y * 100) + '%'; el.style.right = 'auto'; el.style.bottom = 'auto';
+        el.style.transform = `translate(-50%, -50%) scale(${L.s || 1})`;
+      } else { el.style.left = el.style.top = el.style.right = el.style.bottom = el.style.transform = ''; }
+    }
+    root.style.setProperty('--tbOpacity', layout._op || 1);
+  }
+  function entry(el) {
+    const id = el.id;
+    if (!layout[id]) { const r = el.getBoundingClientRect(); layout[id] = { x: (r.left + r.width / 2) / innerWidth, y: (r.top + r.height / 2) / innerHeight, s: 1 }; }
+    return layout[id];
+  }
+  function select(el) {
+    if (sel) sel.classList.remove('sel');
+    sel = el; el.classList.add('sel');
+    $('tEdSize').value = entry(el).s || 1;
+    applyLayout();
+  }
+  VG.TouchLayout = {
+    open() {
+      editing = true; root.classList.add('editing'); root.classList.remove('hidden');
+      $('menu').classList.add('hidden'); $('tEdOp').value = layout._op || 1; sel = null; applyLayout();
+    },
+  };
+  $('tEdSize').addEventListener('input', () => { if (sel) { entry(sel).s = +$('tEdSize').value; applyLayout(); } });
+  $('tEdOp').addEventListener('input', () => { layout._op = +$('tEdOp').value; applyLayout(); });
+  $('tEdReset').addEventListener('click', () => { layout = {}; $('tEdOp').value = 1; $('tEdSize').value = 1; if (sel) sel.classList.remove('sel'); sel = null; applyLayout(); });
+  $('tEdDone').addEventListener('click', () => {
+    try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch (_) { /* private mode */ }
+    editing = false; root.classList.remove('editing'); if (sel) sel.classList.remove('sel'); sel = null;
+    root.classList.add('hidden'); $('menu').classList.remove('hidden');
+  });
+  ['tEdit', 'tEdSize', 'tEdOp'].forEach(id => $(id).addEventListener('pointerdown', (e) => e.stopPropagation()));
+
   function btn(id, down, up) {
     const el = $(id);
-    el.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); VG.Audio.init(); el.classList.add('held'); down(e, el); });
-    const rel = (e) => { el.classList.remove('held'); if (up) up(e, el); };
+    el.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (editing) { select(el); drag = { id: e.pointerId }; try { el.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ } return; }
+      VG.Audio.init(); el.classList.add('held'); down(e, el);
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (!editing || !drag || drag.id !== e.pointerId) return;
+      const L = entry(el);
+      L.x = Math.max(0.03, Math.min(0.97, e.clientX / innerWidth)); L.y = Math.max(0.05, Math.min(0.95, e.clientY / innerHeight));
+      applyLayout();
+    });
+    const rel = (e) => { if (editing) { drag = null; return; } el.classList.remove('held'); if (up) up(e, el); };
     el.addEventListener('pointerup', rel); el.addEventListener('pointercancel', rel);
     el.addEventListener('contextmenu', (e) => e.preventDefault());
     return el;
@@ -114,6 +173,9 @@
   let board = false;
   btn('tBoard', () => { board = !board; VG.HUD.showBoard(board); });
 
+  applyLayout();
+  $('keysBtn').textContent = 'TOUCH LAYOUT';
+
   // ---- lifecycle ----
   G.onMatchStart = () => { inp.mouse = [false, false, false]; inp.stick = null; looks.clear(); stickId = null; board = false; };
   G.onPauseChange = (p) => { if (p) { looks.clear(); stickId = null; base.classList.remove('on'); } };
@@ -129,6 +191,7 @@
   const els = { fire: $('tFire'), steady: $('tSteady'), uav: $('tUav'), air: $('tAir'), ads };
   (function poll() {
     requestAnimationFrame(poll);
+    if (editing) return;
     const on = live();
     root.classList.toggle('hidden', !on);
     document.body.classList.toggle('playing', G.running && !G.ended);

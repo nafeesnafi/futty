@@ -294,7 +294,7 @@
       if (scoped) mw.set(0, -0.15, -0.5);
       cam.localToWorld(mw);
       const showTracer = this.shots % d.tracerEvery === 0 && !scoped;
-      g.fireBullet(this, cam.position.clone(), dir.clone(), d, showTracer ? mw : null);
+      g.fireBullet(this, cam.position.clone(), dir.clone(), d, mw, 1, !showTracer);
       // feedback
       A.shot(d.sound, true);
       VG.FX.playerFlash(mw.x, mw.y, mw.z);

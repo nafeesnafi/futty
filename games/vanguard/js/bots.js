@@ -365,4 +365,69 @@
     }
   }
   VG.Bot = Bot;
+
+  // A soldier driven by the network (another player, or a bot simulated by the host).
+  // Smoothly follows the newest reported position; on the host it also runs the respawn timer for players.
+  class Remote extends Bot {
+    constructor(game, name, team, idx, id, human) {
+      super(game, name, team, idx);
+      this.id = id; this.human = human; this.ready = false;
+      this.tgt = new THREE.Vector3(); this.tYaw = 0; this.tPitch = 0; this.tH = 1.8;
+      this.aimYaw = this.yaw = 0; this.aimPitch = 0;
+      this.setWpn('ar');
+    }
+    setWpn(id) {
+      if (!id || this.wpn === id) return;
+      this.wpn = id; this.def = VG.WEAPONS[id];
+      for (const k in this.guns) this.guns[k].group.visible = k === id;
+    }
+    setState(x, y, z, yaw, pitch, h, w) {
+      this.tgt.set(x, y, z); this.tYaw = yaw; this.tPitch = pitch; this.tH = h;
+      this.setWpn(VG.WEAPON_ORDER[w]);
+    }
+    spawnAt(x, y, z, yaw) {
+      this.pos.set(x, y, z); this.tgt.set(x, y, z); this.vel.set(0, 0, 0);
+      this.yaw = this.aimYaw = this.tYaw = yaw;
+      this.alive = true; this.health = 100; this.lastHit = -99; this.dieT = 0; this.streak = 0;
+      this.model.visible = true; this.model.rotation.set(0, yaw, 0); this.model.scale.set(1, 1, 1);
+    }
+    update(dt, now) {
+      if (!this.alive) {
+        this.updateDeath(dt);
+        // host: bring the player back after the respawn delay once their game is loaded
+        if (this.human && this.game.net && this.game.net.isHost() && this.ready) {
+          this.respawnT -= dt;
+          if (this.respawnT <= 0) {
+            const [x, z, yaw] = this.game.pickSpawn(this);
+            this.spawnAt(x, 0, z, yaw);
+            this.game.net.spawn(this.id, x, z, yaw);
+          }
+        }
+        return;
+      }
+      if (dt <= 0) return;
+      const px = this.pos.x, pz = this.pos.z;
+      if (this.pos.distanceToSquared(this.tgt) > 36) this.pos.copy(this.tgt);
+      else this.pos.lerp(this.tgt, Math.min(1, dt * 14));
+      this.vel.set((this.pos.x - px) / dt, 0, (this.pos.z - pz) / dt);
+      this.aimYaw = wrap(this.aimYaw + wrap(this.tYaw - this.aimYaw) * Math.min(1, dt * 14));
+      this.aimPitch += (this.tPitch - this.aimPitch) * Math.min(1, dt * 14);
+      this.yaw = this.aimYaw;
+      this.height += (this.tH - this.height) * Math.min(1, dt * 12);
+      this.crouched = this.tH < 1.5;
+      this.animate(dt, now);
+    }
+    updateDeath(dt) {
+      if (!this.model.visible) return;
+      this.dieT += dt;
+      const k = Math.min(1, this.dieT / 0.45), e = k * k, m = this.model;
+      const d = this.fallDir || { x: 0, z: 1 };
+      const local = Math.atan2(d.x, d.z) - this.yaw;
+      m.rotation.set(Math.cos(local) * e * 1.5, this.yaw, -Math.sin(local) * e * 1.5, 'YXZ');
+      if (this.dieT > 2.2) m.visible = false;
+    }
+    die(dir) { this.alive = false; this.dieT = 0; this.vel.set(0, 0, 0); this.fallDir = dir; this.respawnT = 3.5; }
+    think() {} hear() {} damaged() {}
+  }
+  VG.Remote = Remote;
 })();

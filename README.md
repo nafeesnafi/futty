@@ -111,6 +111,18 @@ wins (10-minute limit). Every sound is generated in the browser with the Web Aud
 | Hold breath while scoped | Shift |
 | Scoreboard · FPS counter · pause | Tab · F · Esc |
 
+**Online (1v1, 2v2, 4v4).** *Play Online → Create lobby* gives a 6-character code and an invite link.
+Friends join with the code; everyone can switch teams, and the host picks the format and starts the match.
+Empty slots are filled with bots, and a bot takes over if a player leaves. The host's browser runs the
+match (bots, health, kills, respawns); each player moves their own soldier and reports their own hits, so
+shooting feels instant. Kill goal: 15 (1v1), 20 (2v2), 30 (4v4). Like Futt Champions, it connects
+browsers directly over WebRTC using the free PeerJS server, so it needs a normal web address, and the same
+`?peerhost=…` parameters work for a self-hosted PeerServer.
+
+**Custom controls.** On PC, *Controls* lets you rebind every action to any key or mouse button (saved in
+the browser). On phones, *Touch layout* lets you drag every button where you want it, resize it and set
+the button opacity.
+
 **On phones and tablets** (play sideways): the left thumb is a floating move stick (push it to the
 edge to sprint), drag the right side of the screen to look, and hold FIRE (drag it to aim while shooting).
 There are buttons for AIM, JUMP, CROUCH (slide while sprinting), R (reload) and ⇄ (switch weapon), plus

@@ -82,9 +82,10 @@
     requestAnimationFrame(() => { d.style.opacity = 0; });
     setTimeout(() => d.remove(), 1900);
   };
-  H.setDeath = function (on, killer) {
+  H.setDeath = function (on, killer, label) {
     el.death.classList.toggle('hidden', !on);
-    if (on) el.killer.textContent = killer ? killer.toUpperCase() : 'YOURSELF';
+    el.death.querySelector('.by').textContent = label ? '' : 'KILLED BY';
+    if (on) el.killer.textContent = label || (killer ? killer.toUpperCase() : 'YOURSELF');
   };
   H.showBoard = function (on) { el.board.classList.toggle('hidden', !on); if (on) H.renderBoard(); };
 
@@ -132,9 +133,9 @@
     if (p.alive) {
       if (p.reload) hint = 'RELOADING…';
       else if (a.mag === 0 && a.reserve === 0) hint = 'NO AMMO · SWITCH WEAPON';
-      else if (a.mag <= Math.ceil(d.mag * 0.25)) hint = g.touch ? 'TAP R TO RELOAD' : 'PRESS [R] TO RELOAD';
-      if (g.uavReady && !hint) hint = g.touch ? 'UAV READY' : 'UAV READY · PRESS [4]';
-      if (g.airReady && !hint) hint = g.touch ? 'AIRSTRIKE READY · AIM AND TAP' : 'AIRSTRIKE READY · PRESS [5]';
+      else if (a.mag <= Math.ceil(d.mag * 0.25)) hint = g.touch ? 'TAP R TO RELOAD' : `PRESS [${g.keyLabel('reload')}] TO RELOAD`;
+      if (g.uavReady && !hint) hint = g.touch ? 'UAV READY' : `UAV READY · PRESS [${g.keyLabel('uav')}]`;
+      if (g.airReady && !hint) hint = g.touch ? 'AIRSTRIKE READY · AIM AND TAP' : `AIRSTRIKE READY · PRESS [${g.keyLabel('air')}]`;
     }
     set('hint', hint, (h) => { el.hint.textContent = h; });
 
@@ -161,7 +162,7 @@
 
     // scope
     el.scope.style.opacity = p.scopedNow ? 1 : 0;
-    el.breath.textContent = p.breathOut ? 'OUT OF BREATH' : p.holdingBreath ? 'HOLDING BREATH' : (g.touch ? 'HOLD STEADY TO AIM' : 'HOLD [SHIFT] TO STEADY');
+    el.breath.textContent = p.breathOut ? 'OUT OF BREATH' : p.holdingBreath ? 'HOLDING BREATH' : (g.touch ? 'HOLD STEADY TO AIM' : `HOLD [${g.keyLabel('sprint')}] TO STEADY`);
 
     // killstreaks
     const s = p.streak;
@@ -181,7 +182,7 @@
     set('time', mm + ':' + ss, () => { el.timer.textContent = `${mm}:${String(ss).padStart(2, '0')}`; });
 
     // death
-    if (!p.alive) el.respawnIn.textContent = g.respawnT > 0 ? `RESPAWN IN ${g.respawnT.toFixed(1)}` : (g.touch ? 'TAP TO RESPAWN' : 'CLICK TO RESPAWN');
+    if (!p.alive) el.respawnIn.textContent = g.respawnT > 0 ? `RESPAWN IN ${g.respawnT.toFixed(1)}` : (g.net && !g.net.isHost() ? 'RESPAWNING…' : g.touch ? 'TAP TO RESPAWN' : 'CLICK TO RESPAWN');
     if (!el.board.classList.contains('hidden') && (H._bt = (H._bt || 0) + dt) > 0.5) { H._bt = 0; H.renderBoard(); }
 
     drawRadar(now); drawCompass(now);
