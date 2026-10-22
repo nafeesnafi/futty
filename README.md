@@ -81,6 +81,7 @@ level as fast as you can:
 29. **Conveyor**: platforms slide forward and back along the path. Ride them across the gaps
 30. **Rooftops**: leap across rooftops of different heights
 31. **Sunset Sprint**: narrow beams with long jumps in between. Fast and risky
+32. **Bounce Maze**: pads go up, down and around the corner
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 

@@ -384,6 +384,12 @@
         .beam(10, 0.9, 4.2).turn(90).beam(10, 0.9, 4).check(4)
         .turn(-90).beam(12, 0.8, 4.2).beam(8, 0.8, 4.2, 0.5).finish(4),
     },
+    {
+      name: 'Bounce Maze', sky: 0xe6c2b4, tip: 'Pads go up, down and around the corner.',
+      plats: course().pad(2.5).go(3, 4).turn(90).pad(2.5).go(3, 4.5).check()
+        .turn(-90).pad(2.5, -1).pad(3, 4).turn(-90).pad(3, 3).go(3.5, 4.5).check()
+        .turn(90).go(2.5).pad(2.5, -2).go(3.5, 5, { s: 2.5 }).pad(2.5).finish(3.5, 4.5),
+    },
   ];
 
   // ---------- storage ----------
