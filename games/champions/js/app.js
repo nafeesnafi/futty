@@ -1,0 +1,357 @@
+// App shell: menus, team select, match loop, HUD, radar, results.
+// Roles: 'demo' (attract mode behind the menu), 'local' (vs bot), 'host' and 'guest' (online, see net.js).
+var FC = window.FC = window.FC || {};
+
+(() => {
+  const $ = id => document.getElementById(id);
+  const STEP = 1 / 60;
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (_) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} },
+  };
+
+  const S = {
+    role: 'demo', match: null, cfg: null, myTeam: 0, paused: false, acc: 0,
+    view: null, hud: null, kits: null, ended: false,
+    pick: { you: store.get('fsg.champions.you', 5), them: store.get('fsg.champions.them', 20), side: 'you' },
+    diff: 'normal', halfSeconds: 180,
+  };
+
+  if (matchMedia('(pointer: coarse)').matches) document.body.classList.add('touch');
+
+  // ---------- helpers ----------
+  function kitCss(k) {
+    const a = k.shirt, b = k.shirt2;
+    switch (k.pattern) {
+      case 'stripes': return `repeating-linear-gradient(90deg, ${a} 0 22%, ${b} 22% 40%)`;
+      case 'hoops': return `repeating-linear-gradient(180deg, ${a} 0 20%, ${b} 20% 38%)`;
+      case 'halves': return `linear-gradient(90deg, ${a} 50%, ${b} 50%)`;
+      case 'band': return `linear-gradient(90deg, ${a} 38%, ${b} 38% 62%, ${a} 62%)`;
+      case 'sash': return `linear-gradient(135deg, ${a} 38%, ${b} 38% 62%, ${a} 62%)`;
+      case 'sleeves': return `linear-gradient(90deg, ${b} 18%, ${a} 18% 82%, ${b} 82%)`;
+      default: return `linear-gradient(180deg, ${b} 0 10%, ${a} 10%)`;
+    }
+  }
+  FC.kitCss = kitCss;
+
+  const screens = ['scrTitle', 'scrTeams', 'scrOnline', 'scrControls', 'scrPause', 'scrFull'];
+  function show(id) {
+    for (const s of screens) $(s).classList.toggle('hidden', s !== id);
+    const inMatch = !id && S.role !== 'demo';
+    $('hud').classList.toggle('hidden', !(S.role === 'local' || S.role === 'host' || S.role === 'guest'));
+    document.body.classList.toggle('playing', inMatch);
+    FC.Input.enable(inMatch);
+  }
+  FC.show = show;
+
+  let bannerT = null;
+  function banner(big, small, ms = 2200) {
+    $('bnBig').textContent = big; $('bnSmall').textContent = small || '';
+    $('banner').classList.add('show');
+    clearTimeout(bannerT); bannerT = setTimeout(() => $('banner').classList.remove('show'), ms);
+  }
+  function hint(text) {
+    const h = $('hint');
+    if (text) { h.textContent = text; h.classList.add('show'); } else h.classList.remove('show');
+  }
+
+  // ---------- record ----------
+  function renderRecord() {
+    const r = store.get('fsg.champions', null);
+    $('record').textContent = r ? `Your record: ${r.p} played · ${r.w} W · ${r.d} D · ${r.l} L` : 'No matches played yet';
+  }
+  function saveResult(my, their) {
+    const r = store.get('fsg.champions', { p: 0, w: 0, d: 0, l: 0 });
+    r.p++; r[my > their ? 'w' : my < their ? 'l' : 'd']++;
+    store.set('fsg.champions', r);
+  }
+
+  // ---------- team select ----------
+  function sideCard(el, idx, label) {
+    const t = FC.TEAMS[idx];
+    el.querySelector('.shirt').style.background = kitCss(t.kit);
+    el.querySelector('.lbl').textContent = label;
+    el.querySelector('.nm').textContent = t.name;
+    el.querySelector('.rt').textContent = `${t.country} · Overall ${t.rating}`;
+  }
+  function renderTeams() {
+    sideCard($('sideYou'), S.pick.you, 'You');
+    sideCard($('sideThem'), S.pick.them, 'Opponent');
+    $('sideYou').classList.toggle('picking', S.pick.side === 'you');
+    $('sideThem').classList.toggle('picking', S.pick.side === 'them');
+    const q = $('search').value.trim().toLowerCase();
+    const grid = $('clubGrid'); grid.innerHTML = '';
+    FC.TEAMS.forEach((t, i) => {
+      if (q && !(t.name.toLowerCase().includes(q) || t.country.toLowerCase().includes(q) || t.short.toLowerCase().includes(q))) return;
+      const b = document.createElement('button');
+      b.className = 'club' + (i === S.pick.you ? ' sel-you' : '') + (i === S.pick.them ? ' sel-them' : '');
+      b.innerHTML = `<span class="shirt" style="background:${kitCss(t.kit)}"></span><div><div class="cn"></div><div class="cm">${t.country} · ${t.rating}</div></div>`;
+      b.querySelector('.cn').textContent = t.name;
+      b.addEventListener('click', () => {
+        S.pick[S.pick.side] = i;
+        if (S.pick.side === 'you' && !S.onlinePick) S.pick.side = 'them';
+        store.set('fsg.champions.you', S.pick.you); store.set('fsg.champions.them', S.pick.them);
+        renderTeams();
+        if (S.onlinePick) S.onlinePick(i);
+      });
+      grid.appendChild(b);
+    });
+  }
+  $('sideYou').addEventListener('click', () => { S.pick.side = 'you'; renderTeams(); });
+  $('sideThem').addEventListener('click', () => { S.pick.side = 'them'; renderTeams(); });
+  $('search').addEventListener('input', renderTeams);
+  $('btnRandom').addEventListener('click', () => {
+    let r; do r = (Math.random() * FC.TEAMS.length) | 0; while (r === S.pick.you);
+    S.pick.them = r; renderTeams();
+  });
+  for (const [segId, key, num] of [['segDiff', 'diff', false], ['segLen', 'halfSeconds', true]]) {
+    for (const b of $(segId).querySelectorAll('button')) b.addEventListener('click', () => {
+      for (const x of $(segId).querySelectorAll('button')) x.classList.toggle('on', x === b);
+      S[key] = num ? +b.dataset.v : b.dataset.v;
+    });
+  }
+
+  // team picker reused by the online lobby: only "you" is chosen there
+  FC.openTeamPicker = (title, onPick, onBack) => {
+    S.onlinePick = onPick; S.pick.side = 'you';
+    $('teamsTitle').textContent = title;
+    $('sideThem').classList.add('hidden'); document.querySelector('.vs').classList.add('hidden');
+    $('botOpts').classList.add('hidden'); $('btnKickoff').textContent = 'Done ▸';
+    S.teamsBack = onBack;
+    renderTeams(); show('scrTeams');
+  };
+  function openBotPicker() {
+    S.onlinePick = null; S.teamsBack = null;
+    $('teamsTitle').textContent = 'Choose your clubs';
+    $('sideThem').classList.remove('hidden'); document.querySelector('.vs').classList.remove('hidden');
+    $('botOpts').classList.remove('hidden'); $('btnKickoff').textContent = 'Kick Off ▸';
+    S.pick.side = 'you';
+    renderTeams(); show('scrTeams');
+  }
+  FC.pickedTeam = () => S.pick.you;
+
+  $('btnBot').addEventListener('click', () => { FC.Audio.unlock(); openBotPicker(); });
+  $('btnControls').addEventListener('click', () => show('scrControls'));
+  $('controlsBack').addEventListener('click', () => show('scrTitle'));
+  $('teamsBack').addEventListener('click', () => { if (S.teamsBack) S.teamsBack(); else show('scrTitle'); });
+  $('btnKickoff').addEventListener('click', () => {
+    if (S.onlinePick) { if (S.teamsBack) S.teamsBack(); return; }
+    startMatch({ role: 'local', home: S.pick.you, away: S.pick.them, difficulty: S.diff, halfSeconds: S.halfSeconds });
+  });
+  $('btnOnline').addEventListener('click', () => { FC.Audio.unlock(); if (FC.Net) FC.Net.open(); });
+  if (!FC.Net) { $('btnOnline').disabled = true; $('btnOnline').querySelector('small').textContent = 'Coming soon'; }
+
+  // ---------- match control ----------
+  function startMatch(cfg) {
+    S.cfg = cfg; S.role = cfg.role; S.ended = false; S.paused = false; S.acc = 0;
+    S.myTeam = cfg.role === 'guest' ? 1 : 0;
+    S.kits = FC.pickKits(cfg.home, cfg.away);
+    FC.Render.setTeams(S.kits);
+    const H = FC.TEAMS[cfg.home], A = FC.TEAMS[cfg.away];
+    $('sbH').textContent = H.short; $('sbA').textContent = A.short;
+    $('sbKitH').style.background = kitCss(S.kits[0]); $('sbKitA').style.background = kitCss(S.kits[1]);
+    if (cfg.role === 'guest') { S.match = null; }
+    else {
+      const controllers = cfg.role === 'demo' ? [{ type: 'ai', difficulty: 'hard' }, { type: 'ai', difficulty: 'hard' }]
+        : cfg.role === 'local' ? [{ type: 'human' }, { type: 'ai', difficulty: cfg.difficulty }]
+        : [{ type: 'human' }, { type: 'human' }];
+      S.match = new FC.Match({ home: cfg.home, away: cfg.away, halfSeconds: cfg.halfSeconds, controllers });
+      S.view = S.match.view(); S.hud = S.match.hud();
+    }
+    if (S.view) FC.Render.snapCamera(Object.assign({}, S.view, { flip: S.myTeam === 1 }));
+    $('netStat').classList.toggle('hidden', !(cfg.role === 'host' || cfg.role === 'guest'));
+    if (cfg.role !== 'demo') {
+      show(null); FC.Audio.startCrowd(); FC.Audio.whistle(true);
+      banner(`${H.short} v ${A.short}`, cfg.role === 'local' ? `${H.name} vs ${A.name} · ${cfg.difficulty}` : `${H.name} vs ${A.name}`, 2600);
+    }
+  }
+  FC.startMatch = startMatch;
+
+  function startDemo() {
+    let a = (Math.random() * 36) | 0, b; do b = (Math.random() * 36) | 0; while (b === a);
+    startMatch({ role: 'demo', home: a, away: b, halfSeconds: 600 });
+  }
+  FC.toMenu = () => { hint(''); FC.Audio.stopCrowd(); startDemo(); renderRecord(); show('scrTitle'); };
+
+  function pause(on) {
+    if (S.role !== 'local' && S.role !== 'host' && S.role !== 'guest') return;
+    if (S.ended) return;
+    const online = S.role !== 'local';
+    S.paused = on && !online;   // online matches keep running; the menu is just an overlay
+    $('scrPause').querySelector('h2').textContent = online ? 'Match menu' : 'Paused';
+    $('btnRestart').classList.toggle('hidden', online);
+    $('btnQuit').textContent = online ? 'Leave match' : 'Quit to menu';
+    if (on) show('scrPause'); else show(null);
+  }
+  $('btnResume').addEventListener('click', () => pause(false));
+  $('btnRestart').addEventListener('click', () => startMatch(S.cfg));
+  $('btnQuit').addEventListener('click', () => { if (S.role === 'host' || S.role === 'guest') FC.Net.leave(); FC.toMenu(); });
+  $('touchPause').addEventListener('click', () => pause(true));
+  FC.Input.onPause(() => pause($('scrPause').classList.contains('hidden')));
+  addEventListener('keydown', e => {
+    if (e.code === 'Escape' || e.code === 'KeyP') {
+      if (!$('scrPause').classList.contains('hidden')) pause(false);
+      else if (document.body.classList.contains('playing')) pause(true);
+    }
+    if (e.code === 'KeyM') { const m = FC.Audio.toggleMute(); hint(m ? 'Sound off' : 'Sound on'); setTimeout(() => hint(''), 1200); }
+  });
+
+  // screen-space stick → pitch direction (camera is on the +z side; flipped for the away player online)
+  function toWorld(x, y) { const f = S.myTeam === 1 ? -1 : 1; return { x: x * f, z: -y * f }; }
+
+  FC.Input.onAction(a => {
+    const inp = FC.Input.poll(), w = toWorld(inp.x, inp.y);
+    const act = { a: a.a, power: a.power, x: w.x, z: w.z };
+    if (S.role === 'guest') FC.Net.sendAction(act);
+    else if (S.match && !S.paused) S.match.queueAction(S.myTeam, act);
+  });
+
+  // ---------- events → sound / banners ----------
+  function handleEvents(evs) {
+    for (const e of evs) {
+      switch (e.e) {
+        case 'kick': FC.Audio.kick(e.power); break;
+        case 'post': FC.Audio.post(); FC.Audio.oooh(); break;
+        case 'save': FC.Audio.save(); break;
+        case 'tackle': if (e.ok) FC.Audio.tackle(); break;
+        case 'whistle': if (S.role !== 'demo') FC.Audio.whistle(e.short ? false : true); break;
+        case 'goal': {
+          if (S.role === 'demo') break;
+          FC.Audio.goal();
+          const t = FC.TEAMS[e.team === 0 ? S.cfg.home : S.cfg.away];
+          const hud = S.hud;
+          const num = e.id >= 0 ? `#${FC.NUMBERS[e.id % 11]}` : 'Own goal';
+          banner(e.own ? 'OWN GOAL' : 'GOAL!', `${t.name} · ${num} · ${e.minute}'  ·  ${hud ? hud.score.join(' – ') : ''}`, 3000);
+          (S.scorers = S.scorers || []).push(e);
+          break;
+        }
+        case 'half': if (S.role !== 'demo') { FC.Audio.whistle('full'); banner('HALF-TIME', scoreLine(), 2800); } break;
+        case 'full': if (S.role === 'demo') { startDemo(); } else { FC.Audio.whistle('full'); endMatch(); } break;
+        case 'restart': {
+          if (S.role === 'demo') break;
+          const names = { throw: 'Throw-in', corner: 'Corner', goalkick: 'Goal kick' };
+          const mine = e.team === S.myTeam;
+          const t = FC.TEAMS[e.team === 0 ? S.cfg.home : S.cfg.away];
+          hint(mine ? `Your ${names[e.type].toLowerCase()}: aim and press Pass (J)` : `${names[e.type]} to ${t.name}`);
+          break;
+        }
+      }
+    }
+  }
+  FC.handleEvents = handleEvents;
+
+  function scoreLine() {
+    const h = S.hud; if (!h || !S.cfg) return '';
+    return `${FC.TEAMS[S.cfg.home].short} ${h.score[0]} – ${h.score[1]} ${FC.TEAMS[S.cfg.away].short}`;
+  }
+
+  function endMatch() {
+    if (S.ended) return;
+    S.ended = true;
+    hint('');
+    const h = S.hud, cfg = S.cfg;
+    const H = FC.TEAMS[cfg.home], A = FC.TEAMS[cfg.away];
+    const my = h.score[S.myTeam], their = h.score[1 - S.myTeam];
+    saveResult(my, their);
+    $('ftLabel').textContent = my > their ? 'Full time · You win' : my < their ? 'Full time · You lose' : 'Full time · Draw';
+    $('ftH').textContent = H.name; $('ftA').textContent = A.name;
+    $('ftScore').textContent = `${h.score[0]} – ${h.score[1]}`;
+    $('ftScorers').textContent = (S.scorers || []).map(e => `${FC.TEAMS[e.team === 0 ? cfg.home : cfg.away].short} ${e.id >= 0 ? '#' + FC.NUMBERS[e.id % 11] : 'OG'} ${e.minute}'`).join(' · ') || 'No goals';
+    const st = h.stats, poss = st.poss[0] + st.poss[1] || 1;
+    const rows = [
+      [Math.round(st.poss[0] / poss * 100) + '%', 'Possession', Math.round(st.poss[1] / poss * 100) + '%'],
+      [st.shots[0], 'Shots', st.shots[1]], [st.onTarget[0], 'On target', st.onTarget[1]],
+      [st.passes[0], 'Passes', st.passes[1]], [st.corners[0], 'Corners', st.corners[1]],
+    ];
+    $('ftStats').innerHTML = rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('');
+    const btns = $('ftBtns'); btns.innerHTML = '';
+    const add = (label, fn, primary) => { const b = document.createElement('button'); b.className = 'mbtn' + (primary ? ' primary' : ''); b.textContent = label; b.onclick = fn; btns.appendChild(b); };
+    if (S.role === 'local') {
+      add('Rematch', () => { S.scorers = []; startMatch(cfg); }, true);
+      add('Change clubs', () => { S.scorers = []; FC.toMenu(); openBotPicker(); });
+    } else if (FC.Net) FC.Net.fullTimeButtons(add);
+    add('Main menu', () => { S.scorers = []; if (S.role === 'host' || S.role === 'guest') FC.Net.leave(); FC.toMenu(); });
+    show('scrFull');
+  }
+  FC.endMatch = endMatch;
+  FC.resetScorers = () => { S.scorers = []; };
+
+  // ---------- guest hooks (net.js feeds snapshots) ----------
+  FC.setGuestState = (view, hud) => { S.view = view; S.hud = hud; };
+  FC.state = S;
+
+  // ---------- HUD ----------
+  const radar = $('radar'), rg = radar.getContext('2d');
+  function drawRadar(view) {
+    const W = radar.width, H = radar.height, P = FC.PITCH;
+    const flip = S.myTeam === 1 ? -1 : 1;
+    const X = x => (x * flip / P.PL + 0.5) * (W - 16) + 8, Y = z => (z * flip / P.PW + 0.5) * (H - 16) + 8;
+    rg.clearRect(0, 0, W, H);
+    rg.strokeStyle = 'rgba(255,255,255,.5)'; rg.lineWidth = 2;
+    rg.strokeRect(8, 8, W - 16, H - 16);
+    rg.beginPath(); rg.moveTo(W / 2, 8); rg.lineTo(W / 2, H - 8); rg.stroke();
+    rg.beginPath(); rg.arc(W / 2, H / 2, 9.15 / P.PL * (W - 16), 0, 7); rg.stroke();
+    for (const s of [-1, 1]) rg.strokeRect(s < 0 ? 8 : W - 8 - 16.5 / P.PL * (W - 16), H / 2 - 20.16 / P.PW * (H - 16), 16.5 / P.PL * (W - 16), 40.32 / P.PW * (H - 16));
+    view.players.forEach((p, i) => {
+      const team = i < 11 ? 0 : 1;
+      rg.fillStyle = team === S.myTeam ? '#38bdf8' : '#ff5d5d';
+      rg.beginPath(); rg.arc(X(p.x), Y(p.z), 7, 0, 7); rg.fill();
+    });
+    for (let t = 0; t < 2; t++) {
+      const a = view.active[t];
+      if (a >= 0) { const p = view.players[a]; rg.strokeStyle = '#fff'; rg.lineWidth = 3; rg.beginPath(); rg.arc(X(p.x), Y(p.z), 12, 0, 7); rg.stroke(); }
+    }
+    rg.fillStyle = '#fff'; rg.beginPath(); rg.arc(X(view.ball.x), Y(view.ball.z), 5, 0, 7); rg.fill();
+  }
+
+  let lastHint = 0;
+  function updateHud() {
+    const h = S.hud; if (!h) return;
+    $('sbScore').textContent = `${h.score[0]} - ${h.score[1]}`;
+    $('sbClock').textContent = h.phase === 'halftime' ? 'HT' : h.phase === 'fulltime' ? 'FT' : `${h.minute}'`;
+    const charging = FC.Input.charging();
+    $('power').classList.toggle('show', charging);
+    $('powerFill').style.width = (FC.Input.chargeLevel() * 100) + '%';
+    if (h.phase === 'kickoff' && h.setpiece && h.setpiece.team === S.myTeam && performance.now() - lastHint > 400) {
+      hint('Your kick-off: press Pass (J) to start');
+      lastHint = performance.now();
+    } else if (h.phase === 'play' && $('hint').classList.contains('show') && performance.now() - lastHint > 2500) {
+      hint(''); lastHint = performance.now();
+    }
+  }
+
+  // ---------- main loop ----------
+  FC.Render.init($('stage'));
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    if (S.role === 'guest') {
+      if (FC.Net) {
+        const inp = FC.Input.poll(), w = toWorld(inp.x, inp.y);
+        FC.Net.guestTick(dt, w.x, w.z, inp.sprint);
+      }
+    } else if (S.match && !S.paused) {
+      if (S.role !== 'demo') {
+        const inp = document.body.classList.contains('playing') ? FC.Input.poll() : { x: 0, y: 0, sprint: false };
+        const w = toWorld(inp.x, inp.y);
+        S.match.setInput(S.myTeam, w.x, w.z, inp.sprint);
+      }
+      S.acc += dt;
+      let n = 0;
+      while (S.acc >= STEP && n < 8) { S.match.step(STEP); S.acc -= STEP; n++; }
+      if (n === 8) S.acc = 0;
+      S.view = S.match.view(); S.hud = S.match.hud();
+      const evs = S.match.takeEvents();
+      handleEvents(evs);
+      if (S.role === 'host' && FC.Net) FC.Net.hostTick(dt, S.view, S.hud, evs);
+    }
+    if (S.view) {
+      FC.Render.draw(Object.assign({}, S.view, { flip: S.myTeam === 1, active: S.role === 'demo' ? [-1, -1] : S.view.active }), dt);
+      if (S.role !== 'demo') { updateHud(); drawRadar(S.view); }
+    }
+    requestAnimationFrame(frame);
+  }
+  if (window.FC_TEST_HOOK) window.FC_TEST_HOOK(S);
+  startDemo(); renderRecord(); show('scrTitle');
+  requestAnimationFrame(frame);
+})();
