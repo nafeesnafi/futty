@@ -406,6 +406,12 @@
       name: 'Grand Spiral', sky: 0xedc98f, tip: 'A tall, tight spiral with small steps. Keep climbing.',
       plats: course().go(2.5).spiral(26, 5, 1, 2.2, 2.2, 1, i => i === 9 || i === 18 ? 'check' : i % 3 === 2 ? 'crumble' : null).finish(2.5, 0.5),
     },
+    {
+      name: 'Leap of Faith', sky: 0xe6c2b4, tip: 'Huge drops onto distant platforms. Commit to every jump.',
+      plats: course().pad(2.5).go(3, 4, { s: 3 }).go(2.5, 1.5).go(6, -6, { s: 3 }).check(2.5)
+        .stairs(3, 2.4, 1.2, 2.6).go(6.5, -6, { s: 3 }).check(2.5)
+        .stairs(3, 2.4, 1.2, 2.4).finish(6.5, -5),
+    },
   ];
 
   // ---------- storage ----------

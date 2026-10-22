@@ -85,6 +85,7 @@ level as fast as you can:
 33. **Storm Front**: a grey sky and restless platforms in every direction
 34. **Mist Walk**: the fog rolls in. Small platforms, long beams, careful footing
 35. **Grand Spiral**: a tall, tight spiral with small steps. Keep climbing
+36. **Leap of Faith**: huge drops onto distant platforms. Commit to every jump
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 
