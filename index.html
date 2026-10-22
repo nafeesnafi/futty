@@ -79,7 +79,7 @@
 
   <section class="hero">
     <h2>Pick a game and play.</h2>
-    <p>Play 11-a-side Champions League football in 3D, one-on-one football against the CPU, race a Ferrari, Porsche or Bugatti through traffic, or run parkour in 3D. Your records are saved in this browser.</p>
+    <p>Play 11-a-side Champions League football in 3D, one-on-one football against the CPU, race a Ferrari, Porsche or Bugatti through traffic, run parkour in 3D, or fight bots in a first-person deathmatch. Your records are saved in this browser.</p>
   </section>
 
   <h3>All games</h3>
@@ -169,6 +169,28 @@
       </div>
     </a>
 
+    <a class="card" href="games/vanguard/index.html">
+      <svg class="thumb" viewBox="0 0 320 180" aria-hidden="true">
+        <rect width="320" height="180" fill="#9fb0bb"/>
+        <g fill="#7f8d96"><rect x="10" y="40" width="40" height="70"/><rect x="60" y="20" width="34" height="90"/><rect x="230" y="30" width="44" height="80"/><rect x="280" y="50" width="34" height="60"/></g>
+        <rect y="96" width="320" height="84" fill="#55524c"/>
+        <rect x="20" y="70" width="110" height="40" fill="#a8402e"/><rect x="20" y="70" width="110" height="4" fill="#6e2a1e"/>
+        <rect x="200" y="78" width="100" height="32" fill="#2f5c8a"/>
+        <rect x="140" y="98" width="60" height="14" fill="#b5b0a4"/>
+        <g transform="translate(150 84)"><rect x="-5" y="0" width="10" height="20" fill="#4a4f3e"/><circle cx="0" cy="-4" r="5" fill="#6b6a48"/></g>
+        <g fill="#2c2d30"><polygon points="190,180 230,128 300,118 320,130 320,180"/></g>
+        <rect x="236" y="112" width="40" height="8" fill="#3c4044"/>
+        <g stroke="#fff" stroke-width="2"><line x1="160" y1="74" x2="160" y2="80"/><line x1="160" y1="92" x2="160" y2="98"/><line x1="148" y1="86" x2="154" y2="86"/><line x1="166" y1="86" x2="172" y2="86"/></g>
+        <text x="16" y="168" font-family="system-ui, sans-serif" font-weight="800" font-size="13" fill="#ffcc4d">+100</text>
+      </svg>
+      <div class="body">
+        <h4>Vanguard Web <span class="new">3D</span></h4>
+        <p>First-person deathmatch against 5 to 7 bots on a three-lane map with an M4, an MP5 and a sniper rifle.</p>
+        <div class="tags"><span class="tag">Shooter</span><span class="tag">3 weapons</span><span class="tag">Mouse + keyboard</span></div>
+        <div class="foot"><span class="rec" id="recVanguard">No matches yet</span><span class="play">Play ▸</span></div>
+      </div>
+    </a>
+
     <div class="card soon" aria-disabled="true">
       <svg class="thumb" viewBox="0 0 320 180" aria-hidden="true">
         <rect width="320" height="180" fill="#8a7458"/>
@@ -207,6 +229,8 @@
     document.getElementById('stLevels').textContent = `${done}/${PK_LEVELS}`;
     document.getElementById('recParkour').textContent = done >= PK_LEVELS ? `All cleared · ${total.toFixed(1)}s total` : `${done}/${PK_LEVELS} levels cleared`;
   }
+  const vg = read('fsg.vanguard', null);
+  if (vg) document.getElementById('recVanguard').textContent = `${vg.wins}/${vg.matches} wins · best ${vg.bestKills} kills`;
 </script>
 </body>
 </html>
