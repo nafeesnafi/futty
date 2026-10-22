@@ -99,6 +99,7 @@
         <select id="optGfx"><option value="2">High</option><option value="1" selected>Medium</option><option value="0">Low</option></select>
       </label>
     </div>
+    <button id="campBtn" class="btn camp">CAMPAIGN · ASHES OF VERDAN</button>
     <button id="playBtn" class="btn">DEPLOY VS BOTS</button>
     <button id="onlineBtn" class="btn ghost">PLAY ONLINE · 1V1 / 2V2 / 4V4</button>
     <button id="keysBtn" class="btn ghost">CONTROLS</button>
@@ -109,6 +110,50 @@
       <p class="note">Ctrl+W closes the tab in most browsers, so C is the safer crouch key.</p>
     </details>
     <p class="note mobile">Touch controls: left thumb moves (push to the edge to sprint), drag the right side to look, hold FIRE (drag it to aim while shooting). Play with the phone sideways.</p>
+  </div>
+</div>
+
+<div id="campWarn" class="screen hidden">
+  <div class="menuBox glass">
+    <div class="logo small">OPERATION:<br>ASHES OF VERDAN</div>
+    <div class="tagline">A story campaign in three chapters</div>
+    <div class="warn">
+      <b>CONTENT WARNING</b>
+      Contains intense depictions of military trauma, civilian casualties, death of children and comrades,
+      and moral distress. There are no good choices. Discretion is advised.
+    </div>
+    <p class="note">Headphones recommended. Choices are timed: press the key shown (or tap) before the bar burns down.
+      Doing nothing is also a choice.</p>
+    <button id="campBegin" class="btn">I UNDERSTAND · BEGIN</button>
+    <button id="campContinue" class="btn ghost hidden">CONTINUE</button>
+    <button id="campBack" class="btn ghost">BACK</button>
+  </div>
+</div>
+
+<!-- story overlays -->
+<div id="lbTop" class="lb"></div><div id="lbBot" class="lb"></div>
+<div id="nvOverlay"></div>
+<div id="tunnel"></div>
+<div id="water"></div>
+<div id="objective"></div>
+<div id="dlg" class="hidden"><span id="dlgWho"></span><span id="dlgText"></span></div>
+<div id="decision" class="hidden">
+  <div id="decPrompt"></div>
+  <div id="decOpts"></div>
+  <div id="decBarWrap"><div id="decBar"></div></div>
+  <div id="decTime"></div>
+</div>
+<div id="fade"></div>
+<div id="card" class="hidden"></div>
+<div id="campEnd" class="screen hidden">
+  <div class="menuBox glass">
+    <div id="ceTitle" class="logo small"></div>
+    <div id="ceStats"></div>
+    <p class="ceQuote">“In war, the true casualty is the soul of those who survive.”</p>
+    <p class="ceSupport">If you, or someone you know, is carrying something heavy, you don't have to carry it alone.
+      Talk to someone you trust, or find a free, confidential helpline near you at
+      <a href="https://findahelpline.com" target="_blank" rel="noopener">findahelpline.com</a>.</p>
+    <button id="ceMenu" class="btn">RETURN TO MENU</button>
   </div>
 </div>
 
@@ -200,5 +245,8 @@
 <script src="js/touch.js"></script>
 <script src="js/net.js"></script>
 <script src="js/voice.js"></script>
+<script src="js/narrative.js"></script>
+<script src="js/trauma.js"></script>
+<script src="js/campaign.js"></script>
 </body>
 </html>

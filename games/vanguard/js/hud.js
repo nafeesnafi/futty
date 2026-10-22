@@ -153,11 +153,11 @@
     const ch = el.crosshair.children;
     ch[0].style.top = (-gap - 9) + 'px'; ch[1].style.top = gap + 'px';
     ch[2].style.left = (-gap - 9) + 'px'; ch[3].style.left = gap + 'px';
-    el.crosshair.classList.toggle('enemy', !!g.aimTarget && g.hostile(p, g.aimTarget));
-    set('aim', g.aimTarget ? g.aimTarget.name + (g.hostile(p, g.aimTarget) ? '' : '+') : '', (n) => {
+    el.crosshair.classList.toggle('enemy', !!g.aimTarget && g.hostile(p, g.aimTarget) && !g.aimTarget.civ);
+    set('aim', g.aimTarget ? (g.aimTarget.civ ? 'CIVILIAN+' : g.aimTarget.name + (g.hostile(p, g.aimTarget) ? '' : '+')) : '', (n) => {
       const ally = n.endsWith('+');
       el.aimName.textContent = ally ? n.slice(0, -1) : n;
-      el.aimName.style.color = ally ? 'var(--ally)' : 'var(--enemy)';
+      el.aimName.style.color = n === 'CIVILIAN+' ? '#f2f4ee' : ally ? 'var(--ally)' : 'var(--enemy)';
     });
 
     // scope

@@ -163,16 +163,47 @@
       roof: std({ map: T.metal(), color: 0xd0d4d2, roughness: 0.8, metalness: 0, emissive: 0x2a2a28 }),
       floor: std({ map: T.concrete(), color: 0xbab3a3 }),
       lamp: new THREE.MeshBasicMaterial({ color: 0xfff1c8 }),
+      // campaign surfaces
+      plaster: std({ map: T.concrete(), color: 0xa89a80 }),
+      wallpaper: std({ map: T.plywood(), color: 0x7d6d5a }),
+      tile: std({ map: T.concrete(), color: 0xd8dcd6 }),
+      sewer: std({ map: T.brick(), color: 0x6c7a62 }),
+      rubble: std({ map: T.concrete(), color: 0x6e665c }),
+      burnt: std({ map: T.metal(), color: 0x3a3634, roughness: 0.9 }),
+      cloth: std({ color: 0x8a7a68, roughness: 1 }),
+      redlamp: new THREE.MeshBasicMaterial({ color: 0xff5a3a }),
       skyline: new THREE.MeshLambertMaterial({ color: 0x9aa6ad }),
     };
     if (gfx === 0) for (const k in mats) if (mats[k].map) mats[k].map.anisotropy = 1;
   }
 
-  // ---------- the level ----------
-  M.build = function (sceneRef, gfx) {
+  // ---------- level kit (also used by the campaign to build its own levels) ----------
+  M.begin = function (sceneRef, gfx) {
     scene = sceneRef; batches = {}; contIdx = 0; barrels.length = 0;
     P.reset();
     makeMats(gfx);
+  };
+  M.end = function () { flush(); buildBarrels(); };
+  M.kit = { B, wallX, wallZ, container, crate, barrier, barrel, ladder, visBox, mats: () => mats };
+
+  function buildBarrels() {
+    if (!barrels.length) return;
+    const bg = new THREE.CylinderGeometry(0.3, 0.3, 0.9, 14);
+    bg.translate(0, 0.45, 0);
+    const bm = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, metalness: 0.1, map: VG.Tex.metal() });
+    const inst = new THREE.InstancedMesh(bg, bm, barrels.length);
+    const mtx = new THREE.Matrix4();
+    barrels.forEach(([x, z], i) => {
+      mtx.makeRotationY(Math.random() * 6); mtx.setPosition(x, 0, z); inst.setMatrixAt(i, mtx);
+      inst.setColorAt(i, new THREE.Color([0x7a2a1f, 0x2f4f6a, 0x5b6b2e, 0x8a6a1f][i % 4]));
+    });
+    inst.castShadow = inst.receiveShadow = true;
+    scene.add(inst);
+  }
+
+  // ---------- the level ----------
+  M.build = function (sceneRef, gfx) {
+    M.begin(sceneRef, gfx);
     const Bd = M.BOUNDS;
 
     // ground
@@ -305,18 +336,7 @@
       poster('jersey', -24.0 + 0.04, 3.4, 23, 3.6, Math.PI / 2); // warehouse outer wall, facing the courtyard
     }
 
-    // barrels as one instanced mesh
-    const bg = new THREE.CylinderGeometry(0.3, 0.3, 0.9, 14);
-    bg.translate(0, 0.45, 0);
-    const bm = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, metalness: 0.1, map: VG.Tex.metal() });
-    const inst = new THREE.InstancedMesh(bg, bm, barrels.length);
-    const mtx = new THREE.Matrix4();
-    barrels.forEach(([x, z], i) => {
-      mtx.makeRotationY(Math.random() * 6); mtx.setPosition(x, 0, z); inst.setMatrixAt(i, mtx);
-      inst.setColorAt(i, new THREE.Color([0x7a2a1f, 0x2f4f6a, 0x5b6b2e, 0x8a6a1f][i % 4]));
-    });
-    inst.castShadow = inst.receiveShadow = true;
-    scene.add(inst);
+    buildBarrels();
 
     return {
       spawns: [

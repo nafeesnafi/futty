@@ -111,6 +111,22 @@ wins (10-minute limit). Every sound is generated in the browser with the Web Aud
 | Hold breath while scoped | Shift |
 | Scoreboard · FPS counter · pause | Tab · F · Esc |
 
+**Campaign: Operation Ashes of Verdan** (content warning: military trauma, civilian casualties, moral distress).
+A three-chapter story about rules of engagement and what survivors carry. You play Staff Sergeant Sean Miller
+hunting a target through a besieged city:
+
+1. *Rules of Engagement*: a pitch-black tenement in a thunderstorm (night vision on N, flashlight on L).
+2. *Collateral Protocol*: a hospital square under sniper fire, with an offered mortar strike.
+3. *The Cost of Survival*: flooded tunnels under the dam, and a reckoning.
+
+Each chapter ends in a timed decision: time slows, sound drops away under a heartbeat and tinnitus, and you have a
+few seconds to press F, E (or Q) before the bar burns out. Doing nothing is also a choice. Choices feed a
+Psyche & Guilt matrix (guilt, civilian casualties, squad trust, broken vows) that changes who is still alive,
+what the squad says, how the world looks (colour drains away, hands shake when aiming at civilians, recoil gets
+heavier, whispers of what happened bleed into the sound) and which of three endings you reach. Progress is
+saved after each chapter. Code: `js/narrative.js` (decisions, subtitles), `js/trauma.js` (shell shock effects),
+`js/campaign.js` (levels and story scripts).
+
 **Online (1v1, 2v2, 4v4).** *Play Online → Create lobby* gives a 6-character code and an invite link.
 Friends join with the code; everyone can switch teams, and the host picks the format and starts the match.
 Empty slots are filled with bots, and a bot takes over if a player leaves. The host's browser runs the

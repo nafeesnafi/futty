@@ -27,6 +27,7 @@
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     }
     renderer.setPixelRatio(Math.min(devicePixelRatio, [1, 1.25, 2][gfx]));
+    document.body.classList.toggle('lowfx', gfx === 0);
     renderer.setSize(innerWidth, innerHeight);
     const sh = gfx > 0;
     if (renderer.shadowMap.enabled !== sh) {
@@ -39,7 +40,22 @@
     }
   }
 
+  // camera + viewmodel scene are shared by every mode; levels swap G.scene
+  function buildCore() {
+    if (G.camera) return;
+    G.camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 900);
+    // viewmodel scene, rendered on top after clearing depth so guns never clip into walls
+    G.vmScene = new THREE.Scene();
+    G.vmCamera = new THREE.PerspectiveCamera(54, innerWidth / innerHeight, 0.01, 10);
+    G.vmScene.add(new THREE.HemisphereLight(0xe0ecff, 0x6a5c4c, 2.2));
+    const key = new THREE.DirectionalLight(0xfff0d6, 2.2); key.position.set(0.6, 1, 0.4); G.vmScene.add(key);
+    G.vmRoot = new THREE.Group(); G.vmScene.add(G.vmRoot);
+  }
+  G.buildCore = buildCore;
+  G.setupRenderer = () => setupRenderer();
+  G.store = store;
   function buildWorld() {
+    buildCore();
     const scene = G.scene = new THREE.Scene();
     scene.fog = new THREE.Fog(0xb8b6a8, 60, 260);
     scene.background = new THREE.Color(0xb8b6a8);
@@ -53,20 +69,13 @@
     const sc = sun.shadow.camera; sc.left = -64; sc.right = 64; sc.top = 64; sc.bottom = -64; sc.near = 10; sc.far = 190;
     sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.04;
     scene.add(sun); scene.add(sun.target);
-    const camera = G.camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 900);
-    scene.add(camera);
-    // viewmodel scene, rendered on top after clearing depth so guns never clip into walls
-    G.vmScene = new THREE.Scene();
-    G.vmCamera = new THREE.PerspectiveCamera(54, innerWidth / innerHeight, 0.01, 10);
-    G.vmScene.add(new THREE.HemisphereLight(0xe0ecff, 0x6a5c4c, 2.2));
-    const key = new THREE.DirectionalLight(0xfff0d6, 2.2); key.position.set(0.6, 1, 0.4); G.vmScene.add(key);
-    G.vmRoot = new THREE.Group(); G.vmScene.add(G.vmRoot);
+    scene.add(G.camera);
 
     const info = VG.Map.build(scene, +G.settings.gfx);
     G.spawns = info.spawns;
     VG.Nav.build(info.bounds);
     FX.init(scene);
-    G.built = true;
+    G.built = 'compound';
   }
 
   // ---------- input ----------
@@ -85,6 +94,7 @@
     ['w1', 'Assault rifle', 'Digit1'], ['w2', 'SMG', 'Digit2'], ['w3', 'Sniper rifle', 'Digit3'],
     ['uav', 'UAV', 'Digit4'], ['air', 'Airstrike', 'Digit5'], ['board', 'Scoreboard (hold)', 'Tab'], ['fps', 'FPS counter', 'KeyF'],
     ['talk', 'Push to talk (online)', 'KeyV'],
+    ['light', 'Flashlight (campaign)', 'KeyL'], ['nv', 'Night vision (campaign)', 'KeyN'],
   ];
   const DEF = {}; for (const [a, , c] of ACTIONS) DEF[a] = c;
   const DEFAULT_CODES = new Set(Object.values(DEF));
@@ -199,6 +209,7 @@
     G.noLock = true; setPaused(false);
   });
   G.setPaused = (p) => setPaused(p);
+  G.requestLock = () => requestLock();
   function setPaused(p) {
     G.paused = p;
     $('pause').classList.toggle('hidden', !p);
@@ -207,7 +218,12 @@
   }
 
   // ---------- teams / helpers ----------
-  G.hostile = (a, b) => a !== b && (G.mode !== 'tdm' || a.team !== b.team);
+  G.hostile = (a, b) => {
+    if (a === b) return false;
+    // campaign: civilians can be hit by the player (that is the point) but are never targets for the AI
+    if (G.mode === 'campaign') return a.team !== b.team && !a.civ && (a.isPlayer || !b.civ);
+    return G.mode !== 'tdm' || a.team !== b.team;
+  };
 
   G.noise = function (src, radius, gunshot) {
     if (gunshot) src.lastFired = G.now;
@@ -284,6 +300,7 @@
   // ---------- damage, kills, scoring ----------
   G.damage = function (victim, amount, attacker, def, head, dir, dist) {
     if (!victim.alive || G.ended) return;
+    if (victim.invuln || (victim.isPlayer && G.cinematic)) return; // story: scripted moments can't be interrupted
     if (G.net && !G.net.isHost()) {
       // guest: report our own hits; the host owns everyone's health
       if (attacker && attacker.isPlayer && victim !== attacker) {
@@ -294,6 +311,7 @@
       return;
     }
     victim.health -= amount; victim.lastHit = G.now;
+    if (victim.immortal && victim.health < 30) victim.health = 30; // story squadmates only die when the story says so
     if (G.net && victim.human) G.net.dmgTo(victim.id, amount, attacker && attacker.id);
     const lethal = victim.health <= 0;
     if (attacker && attacker.isPlayer && victim !== attacker) {
@@ -339,12 +357,18 @@
     } else if (G.mode === 'tdm') { /* suicides don't change team score */ }
     if (credited && attacker.isPlayer && G.net && !G.net.isHost()) { HUD.hitmarker('kill'); }
     G.firstBlood = G.firstBlood || credited;
+    if (G.mode === 'campaign') { if (VG.Campaign) VG.Campaign.onKill(victim, attacker, head); return; }
     HUD.killfeed(credited ? attacker : null, victim, def, head);
   };
   G.AIRSTRIKE = AIRSTRIKE;
 
   function playerKill(victim, def, head, dist) {
     const p = G.player, now = G.now;
+    if (G.mode === 'campaign') { // no points, medals or killstreaks in the story
+      A.killConfirm();
+      for (const id of VG.WEAPON_ORDER) { const d = VG.WEAPONS[id]; p.ammo[id].reserve = Math.min(d.reserve, p.ammo[id].reserve + Math.ceil(d.mag / 2)); }
+      return;
+    }
     p.bestStreak = Math.max(p.bestStreak, p.streak);
     if (head) p.headshots++;
     A.killConfirm();
@@ -381,6 +405,12 @@
   G.respawnPlayer = function (sx, sz, syaw) {
     const p = G.player;
     if (sx === undefined && G.net && !G.net.isHost()) return; // guests wait for the host to place them
+    if (sx === undefined && G.mode === 'campaign' && VG.Campaign) { // back to the last checkpoint
+      const c = VG.Campaign.checkpoint();
+      p.reset(); p.pos.set(c.x, c.y || 0, c.z); p.yaw = c.yaw; p.pitch = 0;
+      HUD.setDeath(false); G.deathCam = null; VG.Campaign.onRespawn();
+      return;
+    }
     const [x, z, yaw] = sx === undefined ? pickSpawn(p) : [sx, sz, syaw];
     p.reset(); p.pos.set(x, 0, z); p.yaw = yaw; p.pitch = 0;
     HUD.setDeath(false); G.deathCam = null;
@@ -396,6 +426,7 @@
     G.respawn(b);
   };
   G.respawn = function (bot) {
+    if (G.mode === 'campaign') return; // the dead stay dead
     const [x, z, yaw] = pickSpawn(bot);
     bot.spawn(x, z, yaw);
   };
@@ -421,7 +452,7 @@
   }
 
   function checkWin() {
-    if (G.ended) return;
+    if (G.ended || G.mode === 'campaign') return;
     if (G.mode === 'tdm') {
       if (G.teamKills[0] >= G.killGoal || G.teamKills[1] >= G.killGoal) endMatch();
     } else if (G.actors.some(a => a.kills >= G.killGoal)) endMatch();
@@ -502,7 +533,8 @@
     $('loading').classList.remove('hidden');
     // let the loading screen paint before the (synchronous) world build
     setTimeout(() => {
-      if (!G.built) buildWorld();
+      if (G.built !== 'compound') buildWorld();
+      G.resetModeState();
       setupRenderer();
       if (G.actors) for (const b of G.actors) if (b.model) G.scene.remove(b.model);
       if (!G.player) G.player = new VG.Player(G);
@@ -595,7 +627,15 @@
   }
 
   G.quitToMenu = (fromNet) => quitToMenu(fromNet);
+  // undo everything the campaign changes on the shared engine
+  G.resetModeState = function () {
+    G.keepBodies = false; G.speedMul = 1; G.recoilMul = 1; G.cinematic = false; G.freezeAI = false; G.camHook = null;
+    document.body.classList.remove('campaign');
+    if (VG.Trauma) VG.Trauma.reset();
+    if (G.player) G.player.tremor = 0;
+  };
   function quitToMenu(fromNet) {
+    if (G.mode === 'campaign' && VG.Campaign) VG.Campaign.stop();
     if (!fromNet && VG.Net && VG.Net.role) VG.Net.leave();
     G.net = null; G.online = null;
     G.running = false; G.paused = false;
@@ -614,6 +654,7 @@
     if (!G.running || !renderer) { input.pressed = {}; return; }
     if (!G.paused || G.net) {
       if (G.ended) { G.endT += real; G.timeScale = G.endT < 2.4 ? 0.25 : 1; if (G.endT > 3.2) { showEnd(); return; } }
+      if (G.mode === 'campaign') G.timeLeft = 1e9;
       const dt = real * G.timeScale;
       G.now += dt;
       if (!G.ended) G.timeLeft -= dt;
@@ -633,9 +674,9 @@
     const p = G.player, now = G.now;
     if (input.pressed.Digit4) useUav();
     if (input.pressed.Digit5) useAirstrike();
-    if (p.alive) p.update(dt, G.ended || G.paused ? { down: {}, pressed: {}, mouse: [false, false, false], wheel: 0 } : input, now);
+    if (p.alive) p.update(dt, G.ended || G.paused || G.cinematic ? { down: {}, pressed: {}, mouse: [false, false, false], wheel: 0 } : input, now);
     else deathCam(dt);
-    for (const b of G.bots) b.update(dt, now);
+    for (const b of G.bots) { if (G.freezeAI && b.alive) b.animate(0, now); else b.update(dt, now); }
     for (const r of G.remotes) r.update(dt, now);
     if (G.net) G.net.update(real);
     // regenerating health: 4 s without damage, then rapid recovery (the host does it for everyone online)
@@ -664,6 +705,8 @@
     if (!p.alive) { G.respawnT -= real; if (G.respawnT < -2.5) G.respawnPlayer(); }
     FX.update(dt);
     A.setListener(G.camera.position.x, G.camera.position.y, G.camera.position.z, p.yaw);
+    if (G.mode === 'campaign' && VG.Campaign) VG.Campaign.update(dt, real);
+    if (G.camHook) G.camHook(dt, real);
     HUD.update(dt, now);
   }
 
@@ -682,6 +725,9 @@
   }
 
   // test hook: fast-forward the simulation without rendering
+  G.step = (dt, real) => step(dt, real);
+  // async variant for tests: lets promise-based story scripts advance between steps
+  G._simAsync = async (secs) => { for (let i = 0; i < secs * 30 && G.running; i++) { G.now += 1 / 30; step(1 / 30, 1 / 30); input.pressed = {}; await new Promise(r => setTimeout(r, 0)); } };
   G._sim = (secs) => { for (let i = 0; i < secs * 60 && G.running; i++) { G.now += 1 / 60; if (!G.ended) G.timeLeft -= 1 / 60; step(1 / 60, 1 / 60); input.pressed = {}; } };
 
   addEventListener('resize', () => {

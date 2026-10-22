@@ -9,6 +9,7 @@
   P.ladders = [];
   P.GRAVITY = 17;
 
+  P.remove = function (b) { b.dead = true; };
   P.reset = function () { P.boxes = []; P.ladders = []; grid = new Map(); };
 
   // b = { x0,y0,z0,x1,y1,z1, mat, pen (bullets pass), walk (bots walk on top) }
@@ -32,7 +33,7 @@
     const cz0 = Math.floor(z0 / CELL), cz1 = Math.floor(z1 / CELL);
     for (let i = cx0; i <= cx1; i++) for (let k = cz0; k <= cz1; k++) {
       const c = grid.get(i * 1000 + k); if (!c) continue;
-      for (let j = 0; j < c.length; j++) { const b = c[j]; if (b._s !== stamp) { b._s = stamp; qOut.push(b); } }
+      for (let j = 0; j < c.length; j++) { const b = c[j]; if (b._s !== stamp && !b.dead) { b._s = stamp; qOut.push(b); } }
     }
     return qOut;
   };
@@ -82,6 +83,7 @@
     let best = maxDist, bb = null, ax = -1, sg = 0;
     const list = candidates(ox, oz, dx, dz, maxDist);
     for (let i = 0; i < list.length; i++) {
+      if (list[i].dead) continue;
       const t = rayBox(ox, oy, oz, dx, dy, dz, list[i], best);
       if (t >= 0 && t < best) { best = t; bb = list[i]; ax = P.nAxis; sg = P.nSign; }
     }
@@ -99,6 +101,7 @@
     const res = [];
     const list = candidates(ox, oz, dx, dz, maxDist);
     for (let i = 0; i < list.length; i++) {
+      if (list[i].dead) continue;
       const t = rayBox(ox, oy, oz, dx, dy, dz, list[i], maxDist);
       if (t >= 0) {
         const n = [0, 0, 0];

@@ -2,7 +2,7 @@
 (function () {
   const VG = window.VG = window.VG || {};
   const A = VG.Audio = {};
-  let ctx = null, master, dry, wet, noise, listener = { x: 0, y: 0, z: 0, yaw: 0 };
+  let ctx = null, master, dry, wet, noise, muffle, listener = { x: 0, y: 0, z: 0, yaw: 0 };
 
   A.init = function () {
     if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
@@ -12,7 +12,8 @@
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -14; comp.ratio.value = 4; comp.attack.value = 0.002; comp.release.value = 0.15;
     master = ctx.createGain(); master.gain.value = 0.7;
-    master.connect(comp); comp.connect(ctx.destination);
+    muffle = ctx.createBiquadFilter(); muffle.type = 'lowpass'; muffle.frequency.value = 20000; muffle.Q.value = 0.5;
+    master.connect(muffle); muffle.connect(comp); comp.connect(ctx.destination);
     dry = ctx.createGain(); dry.connect(master);
     // short "compound" reverb from a generated impulse
     const verb = ctx.createConvolver();
@@ -235,5 +236,181 @@
       u.rate = 1.05; u.pitch = 0.55; u.volume = 0.9;
       setTimeout(() => speechSynthesis.speak(u), 160);
     } catch (_) { /* speech is optional */ }
+  };
+
+  // =====================================================================
+  // Campaign sound design: score, weather, radio, breathing, trauma layers
+  // =====================================================================
+  A.ctx = () => ctx;
+  // everything (except sounds routed around it) goes through this low-pass: used for time dilation / underwater
+  A.setMuffle = function (freq, time) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    muffle.frequency.cancelScheduledValues(t);
+    muffle.frequency.setValueAtTime(muffle.frequency.value, t);
+    muffle.frequency.exponentialRampToValueAtTime(Math.max(80, freq), t + (time || 0.3));
+  };
+  // a bus that bypasses the muffle (heartbeat / tinnitus stay sharp while the world goes dull)
+  function clearOut(gain) {
+    const g = ctx.createGain(); g.gain.value = gain;
+    const comp = ctx.destination;
+    g.connect(comp);
+    return g;
+  }
+
+  let amb = null;
+  A.startAmbience = function (o) {
+    if (!ctx) return;
+    A.stopAmbience();
+    const t = ctx.currentTime, nodes = [];
+    const bus = ctx.createGain(); bus.gain.setValueAtTime(0.0001, t); bus.gain.exponentialRampToValueAtTime(1, t + 3); bus.connect(dry);
+    const loopNoise = () => { const s = ctx.createBufferSource(); s.buffer = noise; s.loop = true; s.start(t, Math.random()); nodes.push(s); return s; };
+    if (o.rain) { // rain: hiss + patter (on helmets / roofs)
+      const s = loopNoise(), hp = filt('highpass', 1800), lp = filt('lowpass', 9000), g = ctx.createGain();
+      g.gain.value = 0.11 * o.rain; s.connect(hp); hp.connect(lp); lp.connect(g); g.connect(bus);
+      const s2 = loopNoise(), bp = filt('bandpass', 700, 0.6), g2 = ctx.createGain(); g2.gain.value = 0.05 * o.rain;
+      s2.connect(bp); bp.connect(g2); g2.connect(bus);
+    }
+    if (o.drip) { // tunnels: water noise, low and wide
+      const s = loopNoise(), lp = filt('lowpass', 500), g = ctx.createGain(); g.gain.value = 0.08;
+      s.connect(lp); lp.connect(g); g.connect(bus);
+    }
+    if (o.drone) { // score: low detuned drone with a slow breathing filter
+      const lp = filt('lowpass', 320, 0.8), g = ctx.createGain(); g.gain.value = 0.055;
+      for (const f of [o.root || 73.4, (o.root || 73.4) * 1.006, (o.root || 73.4) * 1.5]) {
+        const osc = ctx.createOscillator(); osc.type = 'sawtooth'; osc.frequency.value = f; osc.connect(lp); osc.start(t); nodes.push(osc);
+      }
+      const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 0.05; lg.gain.value = 160;
+      lfo.connect(lg); lg.connect(lp.frequency); lfo.start(t); nodes.push(lfo);
+      lp.connect(g); g.connect(bus); const send = ctx.createGain(); send.gain.value = 0.6; g.connect(send); send.connect(wet);
+    }
+    amb = { nodes, bus, celloT: 4, o };
+  };
+  A.stopAmbience = function () {
+    if (!amb || !ctx) { amb = null; return; }
+    const t = ctx.currentTime, a2 = amb;
+    a2.bus.gain.cancelScheduledValues(t); a2.bus.gain.setValueAtTime(a2.bus.gain.value, t); a2.bus.gain.linearRampToValueAtTime(0, t + 1.5);
+    setTimeout(() => { for (const n of a2.nodes) { try { n.stop(); } catch (_) { /* already stopped */ } } a2.bus.disconnect(); }, 1700);
+    amb = null;
+  };
+  // slow, sparse cello-like phrases over the drone (called every frame with dt)
+  const CELLO = [146.8, 174.6, 130.8, 116.5, 110, 98, 146.8, 138.6];
+  let celloIdx = 0;
+  A.scoreTick = function (dt, mood) {
+    if (!ctx || !amb || !amb.o.drone) return;
+    amb.celloT -= dt;
+    if (amb.celloT > 0) return;
+    amb.celloT = 9 + Math.random() * 8;
+    const f = CELLO[celloIdx++ % CELLO.length] * (mood === 'low' ? 0.5 : 1);
+    cello(f, 5 + Math.random() * 2);
+  };
+  function cello(f, dur) {
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
+    const vib = ctx.createOscillator(), vg = ctx.createGain(); vib.frequency.value = 5.2; vg.gain.value = f * 0.006; vib.connect(vg); vg.connect(o.frequency);
+    const body = filt('lowpass', 900, 1.2), form = filt('peaking', 280, 1); form.gain.value = 6;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.06, t + dur * 0.35);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(body); body.connect(form); form.connect(g); g.connect(dry);
+    const s = ctx.createGain(); s.gain.value = 0.9; g.connect(s); s.connect(wet);
+    o.start(t); vib.start(t); o.stop(t + dur + 0.1); vib.stop(t + dur + 0.1);
+  }
+  A.cello = function (f, dur) { if (ctx) cello(f, dur || 6); };
+
+  A.thunder = function (near) {
+    if (!ctx) return; const t = ctx.currentTime + (near ? 0.05 : 0.6 + Math.random() * 1.5);
+    const o = out(near ? 0.9 : 0.5, (Math.random() - 0.5) * 0.6, 0.9);
+    const f = noiseHit(o, t, 'lowpass', near ? 1400 : 500, 0.7, 1, 0.02, 3.5);
+    f.frequency.exponentialRampToValueAtTime(90, t + 3);
+    tone(o, t, 'sine', 55, 30, 0.8, 0.05, 2.5);
+    if (near) noiseHit(o, t, 'highpass', 2500, 0.5, 0.7, 0.001, 0.15);
+  };
+  A.static = function (dur, vol) {
+    if (!ctx) return; const t = ctx.currentTime; dur = dur || 0.25;
+    const o = out(vol || 0.16);
+    const f = noiseHit(o, t, 'bandpass', 2400, 0.8, 1, 0.005, dur);
+    const am = ctx.createOscillator(), ag = ctx.createGain(); am.type = 'square'; am.frequency.value = 23 + Math.random() * 30; ag.gain.value = 0.5;
+    am.connect(ag); ag.connect(f.frequency); am.start(t); am.stop(t + dur + 0.05);
+  };
+  A.squelch = function () { if (!ctx) return; A.static(0.12, 0.12); tone(out(0.08), ctx.currentTime + 0.1, 'sine', 1900, 1900, 0.4, 0.002, 0.05); };
+  A.breath = function (fast, vol) {
+    if (!ctx) return; const t = ctx.currentTime, v = vol || 0.12, d = fast ? 0.22 : 0.45;
+    const o = clearOut(v);
+    const f1 = noiseHit(o, t, 'bandpass', 900, 1.4, 1, d * 0.5, d * 0.6); f1.frequency.linearRampToValueAtTime(1300, t + d);
+    const f2 = noiseHit(o, t + d * 1.2, 'bandpass', 650, 1.2, 0.8, d * 0.3, d * 0.9); f2.frequency.linearRampToValueAtTime(450, t + d * 2.2);
+  };
+  let tinn = null;
+  A.tinnitus = function (on) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    if (on && !tinn) {
+      const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(7400, t); o.frequency.exponentialRampToValueAtTime(5600, t + 6);
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.035, t + 0.6);
+      o.connect(g); g.connect(clearOut(1)); o.start(t);
+      tinn = { o, g };
+    } else if (!on && tinn) {
+      const k = tinn; tinn = null;
+      k.g.gain.cancelScheduledValues(t); k.g.gain.setValueAtTime(k.g.gain.value, t); k.g.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
+      k.o.stop(t + 1.3);
+    }
+  };
+  A.heartbeatClear = function (vol) {
+    if (!ctx) return; const t = ctx.currentTime, o = clearOut(vol || 0.6);
+    tone(o, t, 'sine', 62, 42, 1, 0.01, 0.15);
+    tone(o, t + 0.22, 'sine', 55, 38, 0.75, 0.01, 0.18);
+  };
+  // indistinct murmur: band-passed noise chopped into syllables, drifting in from one side
+  A.whisper = function (vol) {
+    if (!ctx) return; const t = ctx.currentTime, dur = 1.2 + Math.random() * 1.4;
+    const o = out(vol || 0.1, (Math.random() - 0.5) * 1.8, 0.9);
+    const s = nsrc(t, dur), bp = filt('bandpass', 1100 + Math.random() * 700, 3), g = ctx.createGain();
+    g.gain.value = 0;
+    for (let k = 0; k < dur * 6; k++) { const tt = t + k / 6 + Math.random() * 0.05; g.gain.setValueAtTime(0, tt); g.gain.linearRampToValueAtTime(0.6 + Math.random() * 0.4, tt + 0.04); g.gain.linearRampToValueAtTime(0, tt + 0.12); }
+    s.connect(bp); bp.connect(g); g.connect(o);
+  };
+  // distant, muffled cries through a radio: pitch-gliding voices buried under static (never clear)
+  A.cries = function (dur, vol) {
+    if (!ctx) return; const t = ctx.currentTime; dur = dur || 4;
+    const o = out(vol || 0.1, 0, 0.6), lp = filt('lowpass', 1300), bp = filt('bandpass', 900, 1.5);
+    lp.connect(bp); bp.connect(o);
+    for (let i = 0; i < 4; i++) {
+      const v = ctx.createOscillator(); v.type = 'sawtooth';
+      const st = t + Math.random() * dur * 0.6, len = 0.6 + Math.random() * 1.4, f0 = 320 + Math.random() * 260;
+      v.frequency.setValueAtTime(f0, st); v.frequency.linearRampToValueAtTime(f0 * (1.2 + Math.random() * 0.3), st + len * 0.3); v.frequency.linearRampToValueAtTime(f0 * 0.7, st + len);
+      const g = env(st, 0.25, 0.08, len); v.connect(g); g.connect(lp); v.start(st); v.stop(st + len + 0.1);
+    }
+    A.static(dur, (vol || 0.1) * 0.9);
+  };
+  // a baby crying behind a door: soft, distant, filtered
+  A.infant = function (dur, vol) {
+    if (!ctx) return; const t = ctx.currentTime; dur = dur || 3;
+    const o = out(vol || 0.05, 0.3, 0.7), bp = filt('bandpass', 1300, 2), lp = filt('lowpass', 2200);
+    bp.connect(lp); lp.connect(o);
+    for (let st = t; st < t + dur; st += 0.9 + Math.random() * 0.5) {
+      const v = ctx.createOscillator(); v.type = 'sawtooth'; const len = 0.6 + Math.random() * 0.3;
+      v.frequency.setValueAtTime(430, st); v.frequency.linearRampToValueAtTime(540, st + len * 0.3); v.frequency.linearRampToValueAtTime(380, st + len);
+      const g = env(st, 0.4, 0.06, len); v.connect(g); g.connect(bp); v.start(st); v.stop(st + len + 0.1);
+    }
+  };
+  A.whistle = function () { // incoming shell
+    if (!ctx) return; const t = ctx.currentTime;
+    tone(out(0.18, 0, 0.4), t, 'sine', 1900, 420, 0.5, 0.2, 1.3);
+  };
+  A.waterRush = function (dur) {
+    if (!ctx) return; const t = ctx.currentTime; dur = dur || 6;
+    const o = out(0.9, 0, 0.5), s = nsrc(t, dur), lp = filt('lowpass', 300), g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(1, t + dur * 0.6); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    lp.frequency.exponentialRampToValueAtTime(1800, t + dur * 0.6);
+    s.connect(lp); lp.connect(g); g.connect(o);
+  };
+  A.splash = function () { if (!ctx) return; noiseHit(out(0.12), ctx.currentTime, 'bandpass', 1200 + Math.random() * 600, 0.8, 1, 0.01, 0.18); };
+  A.speakWhisper = function (text, vol) {
+    if (!window.speechSynthesis) return;
+    try {
+      const u = new SpeechSynthesisUtterance(text);
+      if (voice) u.voice = voice;
+      u.rate = 0.72; u.pitch = 0.35; u.volume = vol || 0.28;
+      speechSynthesis.speak(u);
+    } catch (_) { /* optional */ }
   };
 })();
