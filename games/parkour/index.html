@@ -38,9 +38,12 @@
   #overlay.hidden { display: none; }
   #overlay h1 { margin: 0; font-size: clamp(30px, 7vw, 56px); letter-spacing: 1px; color: #f0c674; }
   #overlay p { margin: 0; max-width: 520px; line-height: 1.5; opacity: .92; }
-  #levels { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  #levels {
+    display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; max-width: 860px;
+    max-height: 48vh; overflow-y: auto; padding: 4px; touch-action: pan-y;
+  }
   .lvl {
-    width: 150px; padding: 14px 10px; border-radius: 12px; cursor: pointer; font: inherit; color: inherit;
+    width: 132px; padding: 10px 8px; border-radius: 12px; cursor: pointer; font: inherit; color: inherit;
     background: rgba(251,245,234,.1); border: 2px solid rgba(251,245,234,.35);
     display: flex; flex-direction: column; gap: 4px; align-items: center;
   }
@@ -118,6 +121,63 @@
     return out;
   }
 
+  // Course builder: lays platforms one after another along a heading (0° = -z, 90° = +x).
+  // gap is the edge-to-edge distance along the heading, rise the change in top height.
+  function course() {
+    const out = [{ p: [0, 0, 0], s: [6, 6] }];
+    let x = 0, y = 0, z = 0, w = 6, d = 6, a = 0;
+    const rad = deg => deg * Math.PI / 180;
+    const half = (w, d, dx, dz) => Math.min(Math.abs(dx) > 1e-6 ? w / 2 / Math.abs(dx) : 1e9, Math.abs(dz) > 1e-6 ? d / 2 / Math.abs(dz) : 1e9);
+    const size = s => Array.isArray(s) ? s : [s, s];
+    const along = () => Math.abs(Math.sin(a)) > Math.abs(Math.cos(a)) ? 'x' : 'z';
+    const axis = k => k === 'fwd' ? along() : k === 'side' ? (along() === 'x' ? 'z' : 'x') : k;
+    const c = {
+      turn(deg) { a += rad(deg); return c; },
+      // o: { s, type, m: { axis: x|y|z|fwd|side, amp, speed, phase }, dir (one-off angle offset), h }
+      go(gap, rise = 0, o = {}) {
+        const [nw, nd] = size(o.s || 3), b = a + rad(o.dir || 0);
+        const dx = Math.sin(b), dz = -Math.cos(b);
+        const dist = half(w, d, dx, dz) + gap + half(nw, nd, dx, dz);
+        x += dx * dist; z += dz * dist; y += rise; w = nw; d = nd;
+        const p = { p: [+x.toFixed(2), +y.toFixed(2), +z.toFixed(2)], s: [nw, nd] };
+        if (o.type) p.type = o.type;
+        if (o.h) p.h = o.h;
+        if (o.m) p.m = { ...o.m, axis: axis(o.m.axis) };
+        out.push(p);
+        return c;
+      },
+      check(gap = 2.5, rise = 0, o = {}) { return c.go(gap, rise, { s: 4, ...o, type: 'check' }); },
+      pad(gap = 2.5, rise = 0, o = {}) { return c.go(gap, rise, { s: 3, ...o, type: 'bounce' }); },
+      beam(len, width = 1, gap = 2, rise = 0, o = {}) { return c.go(gap, rise, { ...o, s: along() === 'x' ? [len, width] : [width, len] }); },
+      stairs(n, gap, rise, s = 3, o = {}) { for (let i = 0; i < n; i++) c.go(gap, rise, { s, ...o }); return c; },
+      zig(n, gap, rise = 0, ang = 35, s = 2.5, o = {}) { for (let i = 0; i < n; i++) c.go(gap, rise, { s, ...o, dir: i % 2 ? -ang : ang }); return c; },
+      crumbles(n, gap, rise = 0, s = 2.5, o = {}) { return c.stairs(n, gap, rise, s, { ...o, type: 'crumble' }); },
+      movers(n, ax, amp, speed, gap, s = 3, o = {}) {
+        for (let i = 0; i < n; i++) c.go(gap, 0, { s, ...o, m: { axis: ax, amp, speed, phase: i % 2 ? Math.PI : 0 } });
+        return c;
+      },
+      // n platforms on a circle of radius r ahead of the cursor, each rise higher; cw = 1 or -1
+      spiral(n, r, rise, gap, s = 2.5, cw = 1, typeAt = () => null) {
+        const dx = Math.sin(a), dz = -Math.cos(a);
+        const cx = x + dx * (half(w, d, dx, dz) + gap + s / 2 + r), cz = z + dz * (half(w, d, dx, dz) + gap + s / 2 + r);
+        const step = 2 * Math.asin(Math.min(1, (gap + s * 1.2) / (2 * r))) * cw;
+        let th = a + Math.PI;
+        for (let i = 0; i < n; i++) {
+          x = cx + r * Math.sin(th); z = cz - r * Math.cos(th); y += i ? rise : 0; w = d = s;
+          const p = { p: [+x.toFixed(2), +y.toFixed(2), +z.toFixed(2)], s: [s, s] }, t = typeAt(i);
+          if (t) { p.type = t; if (t === 'check') p.s = [s * 1.4, s * 1.4]; }
+          w = d = p.s[0];
+          out.push(p);
+          th += step;
+        }
+        a = th - step + Math.PI / 2 * cw;
+        return c;
+      },
+      finish(gap = 3, rise = 0) { c.go(gap, rise, { s: 6, type: 'finish' }); return out; },
+    };
+    return c;
+  }
+
   const LEVELS = [
     {
       name: 'Warm Up', tip: 'Learn the basics: jump the gaps and walk the beam.',
@@ -158,6 +218,303 @@
       name: 'Sky Tower', tip: 'Climb the spiral. Brown platforms crumble, so keep moving!',
       plats: spiral(),
     },
+    {
+      name: 'Stepping Stones', sky: 0xf0dcc4, tip: 'Easy hops and gentle steps to get your legs going.',
+      plats: course().go(2.5).go(2.5).zig(4, 2.2, 0, 30, 3).check()
+        .stairs(4, 2, 0.6, 3).go(2.5, 0, { s: 2.5 }).check()
+        .zig(4, 2.5, 0.4, 35, 2.5).finish(),
+    },
+    {
+      name: 'Lazy River', sky: 0xf0dcc4, tip: 'Slow drifting platforms. Wait for them to come to you.',
+      plats: course().go(2.5).movers(2, 'side', 2.5, 0.7, 2.5).go(2.5).check()
+        .movers(3, 'side', 3, 0.8, 2.5).check()
+        .go(2.5, 0.6).movers(2, 'side', 3.5, 0.9, 2.5, 3).finish(),
+    },
+    {
+      name: 'Crumble Path', sky: 0xe8d3b0, tip: 'Brown platforms fall away shortly after you land. Keep moving!',
+      plats: course().go(2.5).crumbles(3, 2.2, 0, 3).check()
+        .crumbles(4, 2.4, 0.3, 2.8).check()
+        .go(2.5, 0.5).crumbles(5, 2.5, 0, 2.6).finish(),
+    },
+    {
+      name: 'Bounce House', sky: 0xedc98f, tip: 'Red pads launch you high. Steer while you fly.',
+      plats: course().go(2.5).pad(2.5).go(3, 4.5).go(2.5).check()
+        .pad(2.5).go(3, 4.5).pad(2.5).go(3, 4.5).check()
+        .go(2.5).pad(2.5, -1).go(3.5, 5).finish(),
+    },
+    {
+      name: 'Balance Beam', sky: 0xedc98f, tip: 'Long narrow beams. Walk, don\'t sprint, if you wobble.',
+      plats: course().beam(8, 1.4, 2.5).go(2.5).beam(10, 1.2, 2.5).check()
+        .turn(90).beam(10, 1, 2.5).go(2.5, 0.6).beam(12, 1, 2.5).check()
+        .turn(-90).beam(8, 0.9, 2.5, 0.6).finish(),
+    },
+    {
+      name: 'Corner Turns', sky: 0xe6c2b4, tip: 'The path snakes left and right. Swing the camera around each corner.',
+      plats: course().go(2.5).go(2.5).turn(90).go(2.5).go(2.5, 0.6).turn(-90).go(2.5).check()
+        .turn(-90).go(2.5).go(2.5, 0.6).turn(90).go(2.5).turn(90).go(2.5).check()
+        .turn(-90).go(2.8).turn(-90).go(2.8, 0.6).turn(90).finish(),
+    },
+    {
+      name: 'Lift Off', sky: 0xe6c2b4, tip: 'Blue platforms going up and down work like lifts. Ride them up.',
+      plats: course().go(2.5).go(2.5, 0, { m: { axis: 'y', amp: 1.8, speed: 0.8 } }).go(2.5, 2).check()
+        .go(2.5, 0, { m: { axis: 'y', amp: 2, speed: 0.9 } }).go(2.5, 2).go(2.5, 0, { m: { axis: 'y', amp: 2, speed: 1 } }).go(2.5, 2).check()
+        .go(2.5, 0, { m: { axis: 'y', amp: 2.2, speed: 1, phase: 1 } }).finish(3, 2),
+    },
+    {
+      name: 'Little Spiral', sky: 0xe8d3b0, tip: 'A short climb around and around.',
+      plats: course().go(2.5).spiral(14, 6, 0.9, 2.2, 2.6, 1, i => i === 6 ? 'check' : null).finish(2.5, 0.4),
+    },
+    {
+      name: 'Mixed Bag', sky: 0xedc98f, tip: 'A bit of everything you\'ve learned so far.',
+      plats: course().go(2.5).zig(3, 2.5, 0.4).movers(2, 'side', 3, 1, 2.5).check()
+        .crumbles(3, 2.4, 0, 2.6).pad(2.5).go(3, 4.5).check()
+        .beam(10, 1, 2.5).turn(90).go(2.5).go(2.5, 0.6).finish(),
+    },
+    {
+      name: 'Long Jumps', sky: 0xf0dcc4, tip: 'Wider gaps. Hold Shift (or push the stick all the way) to sprint before you jump.',
+      plats: course().go(3.2).go(3.4).go(3.6).check()
+        .go(3.8, 0, { s: 3.5 }).go(4, 0, { s: 3.5 }).go(3.5, 0.5).check()
+        .go(4, 0, { s: 3 }).go(4.2, 0, { s: 3 }).finish(4),
+    },
+    {
+      name: 'Ferry Crossing', sky: 0xe6c2b4, tip: 'Platforms slide toward you and away. Jump when they are closest.',
+      plats: course().go(2.5).go(4, 0, { m: { axis: 'fwd', amp: 2, speed: 0.8 } }).go(4).check()
+        .go(4, 0, { m: { axis: 'fwd', amp: 2.2, speed: 1 } }).go(4.5, 0, { m: { axis: 'fwd', amp: 2.2, speed: 1, phase: Math.PI } }).go(4).check()
+        .movers(3, 'side', 3, 1.1, 2.5).finish(),
+    },
+    {
+      name: 'Gentle Descent', sky: 0xdcd8cc, tip: 'Down we go. Big drops are safe, just land on the platform.',
+      plats: course().go(2.5, -1.5).go(3, -1.5).go(3, -1.5).check(2.5, -1)
+        .zig(4, 2.8, -0.8, 35, 2.6).check(2.5, -1)
+        .crumbles(3, 2.8, -0.6, 2.6).go(3, -1).finish(3, -1),
+    },
+    {
+      name: 'Pogo', sky: 0xedc98f, tip: 'Chain bounce pads together. Each one sends you higher.',
+      plats: course().go(2.5).pad(2.5).pad(3, 4).pad(3, 4).go(3, 4).check()
+        .pad(2.5).pad(3, 4).go(3, 4.5).check()
+        .pad(2.5, -2).pad(3, 3).pad(3, 3).finish(3.5, 4.5),
+    },
+    {
+      name: 'Tightrope', sky: 0xd9a98a, tip: 'Even thinner beams, and some of them crumble.',
+      plats: course().beam(10, 0.8, 2.5).go(2.5, 0, { s: 2 }).beam(8, 0.8, 2).check()
+        .turn(90).beam(6, 0.8, 2.5, 0, { type: 'crumble' }).beam(6, 0.8, 2, 0, { type: 'crumble' }).go(2.5, 0.5).check()
+        .turn(-90).beam(12, 0.7, 2.5).finish(2.5),
+    },
+    {
+      name: 'Windmill', sky: 0xe6c2b4, tip: 'Pairs of platforms swing past each other. Time it right.',
+      plats: course().go(2.5).movers(4, 'side', 3.5, 1.3, 2.4, 2.6).check()
+        .turn(90).movers(4, 'side', 3.5, 1.4, 2.4, 2.6).check()
+        .turn(-90).movers(4, 'side', 4, 1.5, 2.6, 2.4).finish(),
+    },
+    {
+      name: 'Twin Towers', sky: 0xedc98f, tip: 'Climb one tower, cross the bridge, climb the next.',
+      plats: course().go(2.5).spiral(10, 5, 1, 2.2, 2.6, 1, i => i === 9 ? 'check' : null)
+        .beam(12, 1.2, 2.5).go(2.5)
+        .spiral(10, 5, 1, 2.2, 2.6, -1, i => i === 5 ? 'check' : null).finish(2.5, 0.5),
+    },
+    {
+      name: 'Elevator Shaft', sky: 0xb8b0a2, tip: 'Lifts take you up between ledges. Mind the timing.',
+      plats: course().go(2.5).go(2.5, 0, { m: { axis: 'y', amp: 2.5, speed: 0.9 } }).go(2.5, 2.5).check()
+        .turn(90).go(2.5, 0, { m: { axis: 'y', amp: 2.5, speed: 1.1 } }).go(2.5, 2.5).turn(90)
+        .go(2.5, 0, { m: { axis: 'y', amp: 2.5, speed: 1.2 } }).go(2.5, 2.5).check()
+        .turn(-90).go(2.5, 0, { m: { axis: 'y', amp: 2.8, speed: 1.3 } }).finish(2.5, 2.6),
+    },
+    {
+      name: 'Zig Zag Canyon', sky: 0xd9a98a, tip: 'Sharp angles left and right over a long drop.',
+      plats: course().go(2.5).zig(6, 2.8, 0.3, 45, 2.4).check()
+        .zig(6, 3, 0.3, 50, 2.2).check()
+        .zig(6, 3.2, 0, 50, 2.2, { type: 'crumble' }).finish(),
+    },
+    {
+      name: 'Hopscotch', sky: 0xf0dcc4, tip: 'Small squares, quick rhythm. Short jumps, no sprinting needed.',
+      plats: course().stairs(6, 1.6, 0, 1.6).check(2)
+        .zig(6, 1.8, 0.3, 30, 1.5).check(2)
+        .stairs(4, 1.8, 0.5, 1.4).crumbles(4, 1.8, 0, 1.6).finish(2.5),
+    },
+    {
+      name: 'Sky Highway', sky: 0xedc98f, tip: 'A fast, straight run. Sprint the whole way for a great time.',
+      plats: course().beam(16, 3, 3).go(4).beam(16, 2.5, 4).check(4)
+        .beam(16, 2, 4).go(4.2, 0.4).beam(16, 2, 4.2).check(4)
+        .beam(20, 1.6, 4.2).finish(4),
+    },
+    {
+      name: 'Pendulum Run', sky: 0xe6c2b4, tip: 'Fast swinging platforms. Watch the rhythm before jumping.',
+      plats: course().go(2.5).movers(3, 'side', 4, 1.8, 2.5, 2.6).check()
+        .go(2.5, 0, { m: { axis: 'y', amp: 2, speed: 1.6 } }).go(2.5, 2).movers(3, 'side', 4, 2, 2.5, 2.4).check()
+        .movers(3, 'fwd', 1.2, 1.8, 3, 2.6).finish(3.5),
+    },
+    {
+      name: 'The Gauntlet', sky: 0xb8b0a2, tip: 'Crumble, bounce, move, repeat. No time to rest.',
+      plats: course().go(2.5).crumbles(3, 2.6, 0.3).pad(2.6).go(3.5, 4.5, { type: 'crumble' }).check()
+        .movers(2, 'side', 3.5, 1.4, 2.6, 2.6).crumbles(3, 2.8).pad(2.6).check(3.5, 4.5)
+        .zig(4, 2.8, 0.4, 40, 2.2, { type: 'crumble' }).finish(),
+    },
+    {
+      name: 'Staircase to Heaven', sky: 0xf0dcc4, tip: 'One long climb. Don\'t look back down.',
+      plats: course().stairs(5, 2.2, 1.2, 2.6).check(2.2, 1)
+        .turn(90).stairs(5, 2.2, 1.2, 2.4).check(2.2, 1)
+        .turn(90).stairs(5, 2.4, 1.3, 2.2).check(2.2, 1)
+        .turn(90).stairs(4, 2.4, 1.3, 2).finish(2.5, 1),
+    },
+    {
+      name: 'Floating Islands', sky: 0xdcd8cc, tip: 'Big islands, big gaps. Sprint and leap between them.',
+      plats: course().go(3.5, 0, { s: 6 }).go(4, 0.5, { s: 5 }).go(4.2, 0, { s: 5, dir: 30 }).check(4)
+        .go(4.2, 0, { s: 5, dir: -30 }).go(4.4, 0.4, { s: 4.5 }).go(4.4, 0, { s: 4.5, dir: 40 }).check(4.2)
+        .go(4.5, 0, { s: 4, dir: -30 }).finish(4.5),
+    },
+    {
+      name: 'Crumble Spiral', sky: 0xd9a98a, tip: 'A spiral where every other step gives way under you.',
+      plats: course().go(2.5).spiral(18, 6, 0.9, 2.3, 2.4, -1, i => i === 8 ? 'check' : i % 2 ? 'crumble' : null).finish(2.5, 0.4),
+    },
+    {
+      name: 'Conveyor', sky: 0xe8d3b0, tip: 'Platforms slide forward and back along the path. Ride them across the gaps.',
+      plats: course().go(2.5).go(4, 0, { s: 3, m: { axis: 'fwd', amp: 2.5, speed: 0.9 } }).go(5.5, 0, { m: { axis: 'fwd', amp: 2.5, speed: 0.9, phase: Math.PI } }).go(4).check()
+        .turn(90).go(4, 0, { m: { axis: 'fwd', amp: 2.5, speed: 1.1 } }).go(5.5, 0, { m: { axis: 'fwd', amp: 2.5, speed: 1.1, phase: Math.PI } }).go(4).check()
+        .turn(-90).go(4.5, 0, { m: { axis: 'fwd', amp: 2.8, speed: 1.2 } }).finish(4),
+    },
+    {
+      name: 'Rooftops', sky: 0xd9a98a, tip: 'Leap across rooftops of different heights.',
+      plats: course().go(3, 1, { s: 5 }).go(3.5, -1.5, { s: [4, 6] }).go(3, 1.2, { s: 4 }).go(3.5, -0.5, { s: [6, 4] }).check(3, 0.8)
+        .turn(90).go(3.5, 1.2, { s: 4 }).go(3.8, -2, { s: 5 }).go(3, 1.5, { s: 3.5 }).go(3.5, 0, { s: [3, 6] }).check(3.5, 1)
+        .go(4, -1, { s: 4 }).go(3, 1.5, { s: 3 }).finish(3.5, 0.5),
+    },
+    {
+      name: 'Sunset Sprint', sky: 0xd9a98a, tip: 'Narrow beams with long jumps in between. Fast and risky.',
+      plats: course().beam(10, 1, 3).beam(10, 1, 4).check(4)
+        .beam(10, 0.9, 4.2).turn(90).beam(10, 0.9, 4).check(4)
+        .turn(-90).beam(12, 0.8, 4.2).beam(8, 0.8, 4.2, 0.5).finish(4),
+    },
+    {
+      name: 'Bounce Maze', sky: 0xe6c2b4, tip: 'Pads go up, down and around the corner.',
+      plats: course().pad(2.5).go(3, 4).turn(90).pad(2.5).go(3, 4.5).check()
+        .turn(-90).pad(2.5, -1).pad(3, 4).turn(-90).pad(3, 3).go(3.5, 4.5).check()
+        .turn(90).go(2.5).pad(2.5, -2).go(3.5, 5, { s: 2.5 }).pad(2.5).finish(3.5, 4.5),
+    },
+    {
+      name: 'Storm Front', sky: 0xb8b0a2, tip: 'A grey sky and restless platforms in every direction.',
+      plats: course().go(2.5).movers(2, 'side', 3, 1.5, 2.6, 2.4).go(2.6, 0, { m: { axis: 'y', amp: 2, speed: 1.5 } }).go(2.6, 2).check()
+        .go(3.5, 0, { m: { axis: 'fwd', amp: 1.5, speed: 1.6 } }).movers(2, 'side', 3.5, 1.7, 3, 2.4).check()
+        .crumbles(3, 2.8, 0.3, 2.4).go(2.8, 0, { m: { axis: 'y', amp: 2.2, speed: 1.7 } }).finish(2.8, 2.2),
+    },
+    {
+      name: 'Mist Walk', sky: 0xdcd8cc, tip: 'The fog rolls in. Small platforms, long beams, careful footing.',
+      plats: course().go(2.6, 0, { s: 2 }).beam(8, 0.9, 2.6).go(2.6, 0.5, { s: 2 }).check()
+        .turn(-90).zig(5, 2.8, 0.2, 35, 2).beam(10, 0.8, 2.8).check()
+        .turn(90).zig(5, 3, 0.3, 40, 1.8, { type: 'crumble' }).finish(),
+    },
+    {
+      name: 'Grand Spiral', sky: 0xedc98f, tip: 'A tall, tight spiral with small steps. Keep climbing.',
+      plats: course().go(2.5).spiral(26, 5, 1, 2.2, 2.2, 1, i => i === 9 || i === 18 ? 'check' : i % 3 === 2 ? 'crumble' : null).finish(2.5, 0.5),
+    },
+    {
+      name: 'Leap of Faith', sky: 0xe6c2b4, tip: 'Huge drops onto distant platforms. Commit to every jump.',
+      plats: course().pad(2.5).go(3, 4, { s: 3 }).go(2.5, 1.5).go(6, -6, { s: 3 }).check(2.5)
+        .stairs(3, 2.4, 1.2, 2.6).go(6.5, -6, { s: 3 }).check(2.5)
+        .stairs(3, 2.4, 1.2, 2.4).finish(6.5, -5),
+    },
+    {
+      name: 'Shuffle', sky: 0xf0dcc4, tip: 'Crossing movers, some fast and some slow. Pick your moment.',
+      plats: course().go(2.5).go(2.5, 0, { s: 2.6, m: { axis: 'side', amp: 3, speed: 0.7 } }).go(2.5, 0, { s: 2.6, m: { axis: 'side', amp: 3, speed: 1.6 } }).go(2.5, 0, { s: 2.6, m: { axis: 'side', amp: 3, speed: 1 } }).check()
+        .go(2.5, 0, { s: 2.4, m: { axis: 'side', amp: 3.5, speed: 1.9 } }).go(2.5, 0, { s: 2.4, m: { axis: 'side', amp: 3.5, speed: 0.8, phase: 2 } }).go(2.5, 0, { s: 2.4, m: { axis: 'side', amp: 3.5, speed: 1.4 } }).check()
+        .go(2.6, 0, { s: 2.2, m: { axis: 'side', amp: 4, speed: 2 } }).go(2.6, 0, { s: 2.2, m: { axis: 'side', amp: 4, speed: 1.2, phase: 1 } }).finish(),
+    },
+    {
+      name: 'Needle Point', sky: 0xd9a98a, tip: 'Tiny one-step pillars. Land softly, then go again.',
+      plats: course().stairs(5, 2.4, 0, 1.2).check(2.4)
+        .zig(5, 2.6, 0.3, 30, 1.1).check(2.4)
+        .stairs(5, 2.8, 0, 1, { type: 'crumble' }).finish(3),
+    },
+    {
+      name: 'Up and Over', sky: 0xedc98f, tip: 'Bounce up, run across, drop down. Repeat until the flag.',
+      plats: course().pad(2.5).go(3, 4.5).beam(8, 1.2, 2.5).go(3, -4).check()
+        .pad(2.5).go(3, 4.5, { s: 2.4 }).beam(8, 1, 2.5).go(3.5, -4.5).check()
+        .pad(2.5).go(3.5, 4.5, { s: 2.2 }).beam(8, 0.9, 2.8).go(3.5, -4, { type: 'crumble' }).finish(3),
+    },
+    {
+      name: 'Twilight Run', sky: 0x9c8aa0, tip: 'The sun is setting. A long course of everything mixed together.',
+      plats: course().zig(4, 2.8, 0.4, 35, 2.4).movers(2, 'side', 3.5, 1.4, 2.6, 2.4).check()
+        .crumbles(3, 2.8, 0.3, 2.4).pad(2.6).go(3.5, 4.5, { s: 2.4 }).check()
+        .turn(90).beam(10, 0.8, 3).go(3.5, 0, { m: { axis: 'fwd', amp: 1.5, speed: 1.4 } }).go(3.5).check()
+        .turn(-90).stairs(4, 2.6, 1.1, 2.2).finish(3),
+    },
+    {
+      name: 'Pillar Hop', sky: 0x9c8aa0, tip: 'Tall pillars at different heights. Every jump is up or down.',
+      plats: course().go(2.5, 1.2, { s: 2, h: 8 }).go(2.6, 1.2, { s: 2, h: 8 }).go(3, -1.5, { s: 2, h: 8 }).go(2.6, 1.3, { s: 2, h: 8 }).check(2.6, 1)
+        .zig(5, 2.8, 0.8, 35, 1.8, { h: 8 }).check(2.6, 0.5)
+        .go(3.5, -2, { s: 1.6, h: 8 }).go(2.6, 1.3, { s: 1.6, h: 8 }).go(2.6, 1.3, { s: 1.6, h: 8 }).finish(3, 0.5),
+    },
+    {
+      name: 'Rush Hour', sky: 0x9c8aa0, tip: 'Fast movers in both directions. Don\'t get left behind.',
+      plats: course().go(2.5).movers(4, 'side', 4, 2, 2.6, 2.4).check()
+        .turn(90).movers(4, 'side', 3.5, 2.2, 2.6, 2.2).check()
+        .turn(-90).go(3.5, 0, { m: { axis: 'fwd', amp: 1.5, speed: 2 } }).movers(3, 'side', 4.5, 2.3, 2.8, 2.2).finish(),
+    },
+    {
+      name: 'Crumbling Bridge', sky: 0xb8b0a2, tip: 'A long bridge falling apart under your feet. Do not stop.',
+      plats: course().crumbles(10, 1.4, 0, [2.6, 2.6]).check(2)
+        .turn(90).crumbles(10, 1.6, 0, 2.2).check(2)
+        .turn(-90).crumbles(10, 1.8, 0.2, 2).finish(2.5),
+    },
+    {
+      name: 'Moonrise', sky: 0x6e6478, tip: 'Night falls. Climb toward the moon on lifts and pads.',
+      plats: course().go(2.5).go(2.6, 0, { m: { axis: 'y', amp: 2.5, speed: 1.2 } }).go(2.6, 2.5, { s: 2.4 }).pad(2.6).go(3.5, 4.5, { s: 2.4 }).check()
+        .turn(90).go(2.6, 0, { m: { axis: 'y', amp: 2.8, speed: 1.4 } }).go(2.6, 2.6, { s: 2.2 }).pad(2.6).go(3.5, 4.5, { s: 2.2 }).check()
+        .turn(-90).spiral(8, 4, 1.1, 2.4, 2, 1).finish(2.5, 0.5),
+    },
+    {
+      name: 'Star Steps', sky: 0x6e6478, tip: 'Small glowing steps in the dark sky.',
+      plats: course().zig(6, 3, 0.6, 40, 1.6).check()
+        .zig(6, 3.2, 0.6, 45, 1.5).check()
+        .zig(6, 3.4, 0.4, 45, 1.4, { type: 'crumble' }).finish(3.5),
+    },
+    {
+      name: 'Midnight Express', sky: 0x6e6478, tip: 'A long fast course in the dark. Sprint on every gap.',
+      plats: course().beam(12, 1.2, 4).go(4.4, 0, { s: 2.6 }).beam(12, 1, 4.4).check(4.4)
+        .turn(90).go(4.5, 0, { s: 2.6, m: { axis: 'side', amp: 3, speed: 1.6 } }).beam(12, 0.9, 4.4).check(4.4)
+        .turn(-90).crumbles(4, 4.2, 0, 2.4).beam(12, 0.8, 4.4).finish(4.4),
+    },
+    {
+      name: 'Clockwork', sky: 0xb8b0a2, tip: 'Platforms moving on every axis at once. Learn the timing.',
+      plats: course().go(2.5).go(2.6, 0, { m: { axis: 'side', amp: 3, speed: 1.5 } }).go(2.6, 0, { m: { axis: 'y', amp: 2, speed: 1.5 } }).go(3.5, 0, { m: { axis: 'fwd', amp: 1.5, speed: 1.5 } }).check(3.5)
+        .go(2.6, 0, { s: 2.4, m: { axis: 'y', amp: 2.2, speed: 1.8 } }).go(2.6, 2.2, { s: 2.4, m: { axis: 'side', amp: 3.5, speed: 1.8 } }).go(3.6, 0, { s: 2.4, m: { axis: 'fwd', amp: 1.6, speed: 1.8 } }).check(3.6)
+        .go(2.6, 0, { s: 2.2, m: { axis: 'side', amp: 4, speed: 2.1 } }).go(2.6, 0, { s: 2.2, m: { axis: 'y', amp: 2.5, speed: 2.1 } }).finish(2.6, 2.4),
+    },
+    {
+      name: 'Sky Fortress', sky: 0xd9a98a, tip: 'Climb the walls of a floating fortress, ledge by ledge.',
+      plats: course().go(3, 0, { s: [8, 3] }).go(2.6, 1.3, { s: [3, 2] }).go(2.6, 1.3, { s: [8, 2] }).turn(90).go(2.6, 1.3, { s: 2 }).check(2.6, 0.5)
+        .stairs(4, 2.8, 1.2, 1.8).turn(90).beam(10, 0.8, 2.8).go(3, 1.2, { s: 1.8 }).check(2.8, 0.5)
+        .turn(90).stairs(4, 3, 1.2, 1.6, { type: 'crumble' }).finish(3, 0.5),
+    },
+    {
+      name: 'Freefall', sky: 0xdcd8cc, tip: 'Bounce high, then drop a long way onto small targets.',
+      plats: course().pad(2.5).pad(3, 4.5).go(3.5, 5).go(5, -6, { s: 2.6 }).check(2.5)
+        .pad(2.5).pad(3, 4.5).go(3.5, 5, { s: 2.4 }).go(5.5, -6, { s: 2.2 }).check(2.5)
+        .pad(2.5).pad(3, 4.5, { s: 2.6 }).go(3.5, 5, { s: 2 }).go(5.5, -5, { s: 2 }).finish(3),
+    },
+    {
+      name: 'Double Helix', sky: 0x9c8aa0, tip: 'Two tight spirals in opposite directions with crumbling steps.',
+      plats: course().go(2.5).spiral(13, 4.5, 1, 2.4, 2, 1, i => i === 12 ? 'check' : i % 2 ? 'crumble' : null)
+        .go(3).spiral(13, 4.5, 1, 2.6, 1.9, -1, i => i % 2 ? 'crumble' : null).finish(2.8, 0.5),
+    },
+    {
+      name: 'Razor Edge', sky: 0xb8b0a2, tip: 'Paper-thin beams, long gaps and no room for mistakes.',
+      plats: course().beam(10, 0.6, 3).beam(10, 0.6, 3.5).check(3.5)
+        .turn(90).beam(10, 0.55, 3.5, 0.4).beam(8, 0.55, 3.5, 0, { type: 'crumble' }).check(3.5)
+        .turn(-90).beam(12, 0.5, 3.8).turn(-90).beam(12, 0.5, 3.8, 0.4).finish(4),
+    },
+    {
+      name: 'Chaos Engine', sky: 0x6e6478, tip: 'Fast, small, moving, crumbling. Expert runners only.',
+      plats: course().go(2.6, 0, { s: 2, m: { axis: 'side', amp: 4, speed: 2.2 } }).crumbles(2, 2.8, 0, 2).pad(2.8, 0, { s: 2.4 }).go(3.5, 4.5, { s: 2, m: { axis: 'side', amp: 2, speed: 1.6 } }).check(3)
+        .zig(4, 3.2, 0.5, 45, 1.6, { type: 'crumble' }).go(3.5, 0, { s: 2.2, m: { axis: 'fwd', amp: 1.5, speed: 2.2 } }).check(3.5)
+        .go(2.8, 0, { s: 2, m: { axis: 'y', amp: 2.5, speed: 2.2 } }).go(2.8, 2.5, { s: 1.6 }).movers(3, 'side', 4.5, 2.5, 2.8, 2).finish(3),
+    },
+    {
+      name: 'Summit', sky: 0xf0dcc4, tip: 'The final climb. Every trick you know, all the way to the top of the sky.',
+      plats: course().stairs(3, 2.8, 1.2, 2.2).pad(2.8).go(3.5, 4.5, { s: 2.2 }).check(2.8)
+        .movers(2, 'side', 4, 2, 2.8, 2.2).go(2.8, 0, { s: 2, m: { axis: 'y', amp: 2.5, speed: 1.8 } }).go(2.8, 2.5, { s: 2 }).check(2.8)
+        .spiral(10, 4.5, 1.1, 2.6, 1.8, 1, i => i % 2 ? 'crumble' : null).check(3, 0.5)
+        .beam(10, 0.6, 3.5).zig(4, 3.4, 0.6, 45, 1.5, { type: 'crumble' }).pad(3, 0, { s: 2.4 }).finish(4, 4.5),
+    },
   ];
 
   // ---------- storage ----------
@@ -175,7 +532,7 @@
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   document.body.appendChild(renderer.domElement);
 
-  const SKY = 0xe8d3b0;
+  const SKY = 0xe8d3b0;   // default; levels may set their own sky colour
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(SKY);
   scene.fog = new THREE.Fog(SKY, 35, 150);
@@ -228,6 +585,7 @@
   function buildLevel(i) {
     if (levelGroup) scene.remove(levelGroup);
     levelGroup = new THREE.Group(); scene.add(levelGroup);
+    scene.background.set(LEVELS[i].sky || SKY); scene.fog.color.set(LEVELS[i].sky || SKY);
     plats = LEVELS[i].plats.map(d => {
       const type = d.type || 'normal', h = d.h || (type === 'bounce' ? 0.6 : 1);
       const geo = new THREE.BoxGeometry(d.s[0], h, d.s[1]);
@@ -367,12 +725,15 @@
     $('oTitle').textContent = 'SKY RUNNER';
     $('oText').textContent = 'Run, jump and climb across floating platforms to reach the golden finish. Don\'t look down.';
     const lv = $('levels'); lv.innerHTML = ''; lv.style.display = '';
+    let firstOpen = null;
     LEVELS.forEach((L, i) => {
       const b = document.createElement('button'); b.className = 'lvl';
       b.innerHTML = `<b>${i + 1}. ${L.name}</b><span>${best[i] != null ? 'Best ' + fmt(best[i]) : 'Not cleared'}</span>`;
       b.addEventListener('click', () => startLevel(i));
       lv.appendChild(b);
+      if (firstOpen === null && best[i] == null) firstOpen = b;
     });
+    if (firstOpen) lv.scrollTop = Math.max(0, firstOpen.offsetTop - lv.offsetTop - 8);
     $('oBtns').innerHTML = '';
     $('overlay').classList.remove('hidden');
     $('hud').style.visibility = 'hidden';
