@@ -92,6 +92,7 @@ level as fast as you can:
 40. **Twilight Run**: the sun is setting. A long course of everything mixed together
 41. **Pillar Hop**: tall pillars at different heights. Every jump is up or down
 42. **Rush Hour**: fast movers in both directions. Don't get left behind
+43. **Crumbling Bridge**: a long bridge falling apart under your feet. Do not stop
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 

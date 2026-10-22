@@ -449,6 +449,12 @@
         .turn(90).movers(4, 'side', 3.5, 2.2, 2.6, 2.2).check()
         .turn(-90).go(3.5, 0, { m: { axis: 'fwd', amp: 1.5, speed: 2 } }).movers(3, 'side', 4.5, 2.3, 2.8, 2.2).finish(),
     },
+    {
+      name: 'Crumbling Bridge', sky: 0xb8b0a2, tip: 'A long bridge falling apart under your feet. Do not stop.',
+      plats: course().crumbles(10, 1.4, 0, [2.6, 2.6]).check(2)
+        .turn(90).crumbles(10, 1.6, 0, 2.2).check(2)
+        .turn(-90).crumbles(10, 1.8, 0.2, 2).finish(2.5),
+    },
   ];
 
   // ---------- storage ----------
