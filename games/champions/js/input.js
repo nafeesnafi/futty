@@ -17,11 +17,17 @@ var FC = window.FC = window.FC || {};
     through: ['KeyL', 'KeyC'],
     shoot: ['KeyK', 'KeyX'],
     switch: ['KeyQ', 'Space'],
+    lob: ['KeyI', 'KeyV'],
   };
   const codeToAction = {};
   for (const [a, codes] of Object.entries(MAP)) for (const c of codes) codeToAction[c] = a;
 
   function fire(a, extra) { if (!enabled) return; for (const f of listeners) f(Object.assign({ a }, extra)); }
+  // Pass while charging a shot = fake shot
+  function press(a) { if (a === 'pass' && charge) { charge = null; fire('fake'); } else fire(a); }
+  // double-tapping sprint knocks the ball ahead
+  let lastSprint = 0;
+  function sprintTap() { const now = performance.now(); if (now - lastSprint < 300) { fire('knock'); lastSprint = 0; } else lastSprint = now; }
   function startCharge() { if (enabled && !charge) charge = { t0: performance.now() }; }
   function releaseCharge() {
     if (!charge) return;
@@ -35,9 +41,10 @@ var FC = window.FC = window.FC || {};
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code) && enabled) e.preventDefault();
     if (keys[e.code]) return;         // ignore auto-repeat
     keys[e.code] = true;
+    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') sprintTap();
     const a = codeToAction[e.code];
     if (!a) return;
-    if (a === 'shoot') startCharge(); else fire(a);
+    if (a === 'shoot') startCharge(); else press(a);
   });
   addEventListener('keyup', e => {
     keys[e.code] = false;
@@ -50,9 +57,11 @@ var FC = window.FC = window.FC || {};
     const gp = pads && [...pads].find(p => p && p.connected);
     if (!gp) return null;
     const btn = i => !!(gp.buttons[i] && gp.buttons[i].pressed);
-    // standard mapping: 0 A, 1 B, 3 Y, 4 LB, 5 RB, 7 RT, 9 Start
-    const now = { pass: btn(0), shoot: btn(1), through: btn(3), switch: btn(4), pause: btn(9) };
-    if (now.pass && !pad.prev.pass) fire('pass');
+    // standard mapping: 0 A, 1 B, 2 X, 3 Y, 4 LB, 5 RB, 7 RT, 9 Start
+    const now = { pass: btn(0), shoot: btn(1), lob: btn(2), through: btn(3), switch: btn(4), pause: btn(9), sprint: btn(5) || btn(7) };
+    if (now.pass && !pad.prev.pass) press('pass');
+    if (now.lob && !pad.prev.lob) fire('lob');
+    if (now.sprint && !pad.prev.sprint) sprintTap();
     if (now.through && !pad.prev.through) fire('through');
     if (now.switch && !pad.prev.switch) fire('switch');
     if (now.shoot && !pad.prev.shoot) startCharge();
@@ -109,7 +118,7 @@ var FC = window.FC = window.FC || {};
         const a = b.dataset.act;
         b.addEventListener('pointerdown', e => {
           e.preventDefault(); b.setPointerCapture(e.pointerId); b.classList.add('down');
-          if (a === 'shoot') startCharge(); else if (a === 'sprint') touch.sprint = true; else fire(a);
+          if (a === 'shoot') startCharge(); else if (a === 'sprint') { touch.sprint = true; sprintTap(); } else press(a);
           if (a === 'switch') touch.shield = true;
         });
         const up = () => { b.classList.remove('down'); if (a === 'shoot') releaseCharge(); if (a === 'sprint') touch.sprint = false; if (a === 'switch') touch.shield = false; };

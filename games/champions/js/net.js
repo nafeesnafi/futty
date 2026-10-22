@@ -149,7 +149,7 @@ var FC = window.FC = window.FC || {};
         case 'team': N.oppTeam = validTeam(m.team); sendLobby(); render(); break;
         case 'in': if (N.inMatch && FC.state.match) FC.state.match.setInput(1, num(m.x), num(m.z), !!m.sp, !!m.sh); break;
         case 'act':
-          if (N.inMatch && FC.state.match && ['pass', 'through', 'shoot', 'switch'].includes(m.a))
+          if (N.inMatch && FC.state.match && ['pass', 'through', 'shoot', 'switch', 'lob', 'fake', 'knock'].includes(m.a))
             FC.state.match.queueAction(1, { a: m.a, power: clamp01(m.power), x: num(m.x), z: num(m.z) });
           break;
         case 'rematch': showBanner('Rematch?', 'Your friend wants a rematch'); break;
