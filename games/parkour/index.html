@@ -508,6 +508,13 @@
         .zig(4, 3.2, 0.5, 45, 1.6, { type: 'crumble' }).go(3.5, 0, { s: 2.2, m: { axis: 'fwd', amp: 1.5, speed: 2.2 } }).check(3.5)
         .go(2.8, 0, { s: 2, m: { axis: 'y', amp: 2.5, speed: 2.2 } }).go(2.8, 2.5, { s: 1.6 }).movers(3, 'side', 4.5, 2.5, 2.8, 2).finish(3),
     },
+    {
+      name: 'Summit', sky: 0xf0dcc4, tip: 'The final climb. Every trick you know, all the way to the top of the sky.',
+      plats: course().stairs(3, 2.8, 1.2, 2.2).pad(2.8).go(3.5, 4.5, { s: 2.2 }).check(2.8)
+        .movers(2, 'side', 4, 2, 2.8, 2.2).go(2.8, 0, { s: 2, m: { axis: 'y', amp: 2.5, speed: 1.8 } }).go(2.8, 2.5, { s: 2 }).check(2.8)
+        .spiral(10, 4.5, 1.1, 2.6, 1.8, 1, i => i % 2 ? 'crumble' : null).check(3, 0.5)
+        .beam(10, 0.6, 3.5).zig(4, 3.4, 0.6, 45, 1.5, { type: 'crumble' }).pad(3, 0, { s: 2.4 }).finish(4, 4.5),
+    },
   ];
 
   // ---------- storage ----------
