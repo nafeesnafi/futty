@@ -74,6 +74,7 @@ level as fast as you can:
 22. **Hopscotch**: small squares, quick rhythm. Short jumps, no sprinting needed
 23. **Sky Highway**: a fast, straight run. Sprint the whole way for a great time
 24. **Pendulum Run**: fast swinging platforms. Watch the rhythm before jumping
+25. **The Gauntlet**: crumble, bounce, move, repeat. No time to rest
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 
