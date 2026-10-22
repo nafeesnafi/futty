@@ -80,6 +80,7 @@ level as fast as you can:
 28. **Crumble Spiral**: a spiral where every other step gives way under you
 29. **Conveyor**: platforms slide forward and back along the path. Ride them across the gaps
 30. **Rooftops**: leap across rooftops of different heights
+31. **Sunset Sprint**: narrow beams with long jumps in between. Fast and risky
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 

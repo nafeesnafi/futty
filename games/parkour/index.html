@@ -378,6 +378,12 @@
         .turn(90).go(3.5, 1.2, { s: 4 }).go(3.8, -2, { s: 5 }).go(3, 1.5, { s: 3.5 }).go(3.5, 0, { s: [3, 6] }).check(3.5, 1)
         .go(4, -1, { s: 4 }).go(3, 1.5, { s: 3 }).finish(3.5, 0.5),
     },
+    {
+      name: 'Sunset Sprint', sky: 0xd9a98a, tip: 'Narrow beams with long jumps in between. Fast and risky.',
+      plats: course().beam(10, 1, 3).beam(10, 1, 4).check(4)
+        .beam(10, 0.9, 4.2).turn(90).beam(10, 0.9, 4).check(4)
+        .turn(-90).beam(12, 0.8, 4.2).beam(8, 0.8, 4.2, 0.5).finish(4),
+    },
   ];
 
   // ---------- storage ----------
