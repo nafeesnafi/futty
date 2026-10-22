@@ -254,6 +254,12 @@
         .turn(-90).go(2.5).go(2.5, 0.6).turn(90).go(2.5).turn(90).go(2.5).check()
         .turn(-90).go(2.8).turn(-90).go(2.8, 0.6).turn(90).finish(),
     },
+    {
+      name: 'Lift Off', sky: 0xe6c2b4, tip: 'Blue platforms going up and down work like lifts. Ride them up.',
+      plats: course().go(2.5).go(2.5, 0, { m: { axis: 'y', amp: 1.8, speed: 0.8 } }).go(2.5, 2).check()
+        .go(2.5, 0, { m: { axis: 'y', amp: 2, speed: 0.9 } }).go(2.5, 2).go(2.5, 0, { m: { axis: 'y', amp: 2, speed: 1 } }).go(2.5, 2).check()
+        .go(2.5, 0, { m: { axis: 'y', amp: 2.2, speed: 1, phase: 1 } }).finish(3, 2),
+    },
   ];
 
   // ---------- storage ----------

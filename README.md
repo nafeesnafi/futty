@@ -59,6 +59,7 @@ level as fast as you can:
 7. **Bounce House**: red pads launch you high. Steer while you fly
 8. **Balance Beam**: long narrow beams. Walk, don't sprint, if you wobble
 9. **Corner Turns**: the path snakes left and right. Swing the camera around each corner
+10. **Lift Off**: blue platforms going up and down work like lifts. Ride them up
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 
