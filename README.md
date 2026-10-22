@@ -89,6 +89,7 @@ level as fast as you can:
 37. **Shuffle**: crossing movers, some fast and some slow. Pick your moment
 38. **Needle Point**: tiny one-step pillars. Land softly, then go again
 39. **Up and Over**: bounce up, run across, drop down. Repeat until the flag
+40. **Twilight Run**: the sun is setting. A long course of everything mixed together
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 

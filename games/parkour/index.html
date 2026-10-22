@@ -430,6 +430,13 @@
         .pad(2.5).go(3, 4.5, { s: 2.4 }).beam(8, 1, 2.5).go(3.5, -4.5).check()
         .pad(2.5).go(3.5, 4.5, { s: 2.2 }).beam(8, 0.9, 2.8).go(3.5, -4, { type: 'crumble' }).finish(3),
     },
+    {
+      name: 'Twilight Run', sky: 0x9c8aa0, tip: 'The sun is setting. A long course of everything mixed together.',
+      plats: course().zig(4, 2.8, 0.4, 35, 2.4).movers(2, 'side', 3.5, 1.4, 2.6, 2.4).check()
+        .crumbles(3, 2.8, 0.3, 2.4).pad(2.6).go(3.5, 4.5, { s: 2.4 }).check()
+        .turn(90).beam(10, 0.8, 3).go(3.5, 0, { m: { axis: 'fwd', amp: 1.5, speed: 1.4 } }).go(3.5).check()
+        .turn(-90).stairs(4, 2.6, 1.1, 2.2).finish(3),
+    },
   ];
 
   // ---------- storage ----------
