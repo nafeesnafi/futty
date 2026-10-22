@@ -63,6 +63,7 @@ level as fast as you can:
 11. **Little Spiral**: a short climb around and around
 12. **Mixed Bag**: a bit of everything you've learned so far
 13. **Long Jumps**: wider gaps. Hold Shift (or push the stick all the way) to sprint before you jump
+14. **Ferry Crossing**: platforms slide toward you and away. Jump when they are closest
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 

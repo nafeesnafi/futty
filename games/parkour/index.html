@@ -276,6 +276,12 @@
         .go(3.8, 0, { s: 3.5 }).go(4, 0, { s: 3.5 }).go(3.5, 0.5).check()
         .go(4, 0, { s: 3 }).go(4.2, 0, { s: 3 }).finish(4),
     },
+    {
+      name: 'Ferry Crossing', sky: 0xe6c2b4, tip: 'Platforms slide toward you and away. Jump when they are closest.',
+      plats: course().go(2.5).go(4, 0, { m: { axis: 'fwd', amp: 2, speed: 0.8 } }).go(4).check()
+        .go(4, 0, { m: { axis: 'fwd', amp: 2.2, speed: 1 } }).go(4.5, 0, { m: { axis: 'fwd', amp: 2.2, speed: 1, phase: Math.PI } }).go(4).check()
+        .movers(3, 'side', 3, 1.1, 2.5).finish(),
+    },
   ];
 
   // ---------- storage ----------
