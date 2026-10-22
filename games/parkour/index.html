@@ -496,6 +496,12 @@
       plats: course().go(2.5).spiral(13, 4.5, 1, 2.4, 2, 1, i => i === 12 ? 'check' : i % 2 ? 'crumble' : null)
         .go(3).spiral(13, 4.5, 1, 2.6, 1.9, -1, i => i % 2 ? 'crumble' : null).finish(2.8, 0.5),
     },
+    {
+      name: 'Razor Edge', sky: 0xb8b0a2, tip: 'Paper-thin beams, long gaps and no room for mistakes.',
+      plats: course().beam(10, 0.6, 3).beam(10, 0.6, 3.5).check(3.5)
+        .turn(90).beam(10, 0.55, 3.5, 0.4).beam(8, 0.55, 3.5, 0, { type: 'crumble' }).check(3.5)
+        .turn(-90).beam(12, 0.5, 3.8).turn(-90).beam(12, 0.5, 3.8, 0.4).finish(4),
+    },
   ];
 
   // ---------- storage ----------
