@@ -210,7 +210,7 @@ var FC = window.FC = window.FC || {};
       power = clamp(power, 0.05, 1);
       const speed = 15 + power * 16;
       const quality = this.rf(p);
-      let err = (errMul || 0.05) * (1.4 - quality) * 3 + Math.max(0, power - 0.82) * 0.22 + dist / 700;
+      let err = (errMul || 0.05) * (1.4 - quality) * 4.5 + Math.max(0, power - 0.82) * 0.22 + dist / 500;
       const ang = Math.atan2(tz - b.z, gx - b.x) + rand(-err, err);
       const ty = clamp(0.25 + power * 1.5 + rand(-0.4, 0.4) + Math.max(0, power - 0.88) * rand(0, 5), 0.15, 4);
       const T = dist / speed;
@@ -804,7 +804,8 @@ var FC = window.FC = window.FC || {};
 
       const angleOk = Math.abs(p.z) < 18;
       const blocked = near && nd < 2.2 && (near.x - p.x) * d > 0;
-      if (distGoal < 28 && angleOk && (!blocked || distGoal < 16 || Math.random() < 0.35) && (distGoal < 22 || Math.random() < 0.5)) {
+      const shootP = distGoal < 14 ? 0.8 : distGoal < 20 ? 0.35 : distGoal < 27 ? 0.12 : 0;
+      if (angleOk && Math.random() < shootP * (blocked ? 0.4 : 1)) {
         this.shoot(p, clamp(0.45 + distGoal / 50 + rand(-0.1, 0.15), 0.4, 0.9), null, diff.shotErr);
         return;
       }
