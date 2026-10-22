@@ -78,6 +78,7 @@ level as fast as you can:
 26. **Staircase to Heaven**: one long climb. Don't look back down
 27. **Floating Islands**: big islands, big gaps. Sprint and leap between them
 28. **Crumble Spiral**: a spiral where every other step gives way under you
+29. **Conveyor**: platforms slide forward and back along the path. Ride them across the gaps
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 
