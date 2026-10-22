@@ -71,6 +71,7 @@ level as fast as you can:
 19. **Twin Towers**: climb one tower, cross the bridge, climb the next
 20. **Elevator Shaft**: lifts take you up between ledges. Mind the timing
 21. **Zig Zag Canyon**: sharp angles left and right over a long drop
+22. **Hopscotch**: small squares, quick rhythm. Short jumps, no sprinting needed
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 
