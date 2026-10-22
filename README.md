@@ -66,6 +66,7 @@ level as fast as you can:
 14. **Ferry Crossing**: platforms slide toward you and away. Jump when they are closest
 15. **Gentle Descent**: down we go. Big drops are safe, just land on the platform
 16. **Pogo**: chain bounce pads together. Each one sends you higher
+17. **Tightrope**: even thinner beams, and some of them crumble
 
 Green platforms are checkpoints. Fall into the clouds and you respawn at the last one.
 
