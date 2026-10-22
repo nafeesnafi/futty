@@ -97,6 +97,7 @@ var FC = window.FC = window.FC || {};
 
   // ---------- connection wiring ----------
   function wire(conn) {
+    N.lastRecv = performance.now();   // start the silence timer when the connection begins
     conn.on('open', () => {
       N.lastRecv = performance.now();
       if (N.role === 'guest') send({ t: 'hello', v: PROTOCOL, team: FC.pickedTeam() });
@@ -159,7 +160,7 @@ var FC = window.FC = window.FC || {};
         case 'reject': fail('Your friend is using a different version of the game. Both of you should reload the page.'); break;
         case 'lobby': N.state = 'lobby'; N.lobby = m; render(); break;
         case 'start': startGuest(m); break;
-        case 's': pushSnap(m); break;
+        case 's': pushSnap(m); FC.state.hud = m.h; break;   // newest score/clock right away; positions are interpolated
         case 'ev': FC.handleEvents(m.evs); break;
         case 'lobbyback': N.inMatch = false; N.state = 'lobby'; FC.toMenu(); FC.show('scrOnline'); render(); break;
       }
@@ -217,7 +218,8 @@ var FC = window.FC = window.FC || {};
     let i = sn.length - 1;
     while (i > 0 && sn[i - 1].c > rt) i--;
     const b = sn[i], a = sn[i - 1];
-    if (!a || rt >= b.c) return b;
+    const newest = sn[sn.length - 1];
+    if (!a || rt >= b.c) return { view: b.view, hud: newest.hud };
     const t = Math.max(0, Math.min(1, (rt - a.c) / ((b.c - a.c) || 1)));
     const L = (x, y) => x + (y - x) * t;
     const view = {
@@ -228,7 +230,7 @@ var FC = window.FC = window.FC || {};
       }),
       active: b.view.active,
     };
-    return { view, hud: b.hud };
+    return { view, hud: newest.hud };
   }
 
   // ---------- per-frame hooks called by app.js ----------
@@ -348,7 +350,7 @@ var FC = window.FC = window.FC || {};
         <div class="matchup">${clubHtml(home, isHost ? 'You · home' : 'Host · home', isHost)}<div class="vs">VS</div>${clubHtml(away, isHost ? 'Friend · away' : 'You · away', !isHost)}</div>
         <div class="opts" style="justify-content:space-between">
           <span><span class="optlbl">Match</span><span class="seg" id="olLen">${[90, 180, 300].map(v => `<button data-v="${v}" class="${v === len ? 'on' : ''}" ${isHost ? '' : 'disabled'}>${v / 30} min</button>`).join('')}</span></span>
-          <span class="note">${N.rtt == null ? 'Connected' : 'Connected · ' + Math.round(N.rtt) + ' ms'}</span>
+          <span class="note" id="olPing">${pingText()}</span>
         </div>
         ${isHost ? '<button class="btn primary" id="olStart">Start match ▸</button>' : '<div class="card" style="width:auto;text-align:center"><p class="note" style="font-size:15px">Waiting for the host to start the match…</p></div>'}
         ${err}`;
@@ -370,9 +372,14 @@ var FC = window.FC = window.FC || {};
     if (seg && N.role === 'host') for (const b of seg.querySelectorAll('button')) b.addEventListener('click', () => { N.halfSeconds = +b.dataset.v; sendLobby(); render(); });
   }
 
-  // keep the lobby's ping readout fresh
+  // keep the lobby's ping readout fresh (text only, so buttons aren't redrawn under the player's finger)
+  function pingText() { return N.rtt == null ? 'Connected' : 'Connected · ' + Math.round(N.rtt) + ' ms'; }
   setInterval(() => {
-    if (N.conn && !N.inMatch) { send({ t: 'ping', ts: performance.now() }); if (N.state === 'lobby' && !$('scrOnline').classList.contains('hidden')) render(); }
+    if (N.conn && !N.inMatch) {
+      send({ t: 'ping', ts: performance.now() });
+      if (N.conn && performance.now() - N.lastRecv > 10000) { onGone(); return; }
+      const el = $('olPing'); if (el) el.textContent = pingText();
+    }
   }, 2000);
 
   // invite links: ?join=CODE opens the online screen and connects

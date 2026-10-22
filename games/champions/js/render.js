@@ -326,9 +326,10 @@ var FC = window.FC = window.FC || {};
         if (s.dive) { p.body.rotation.z = s.dive; p.body.position.y = 0.2; } else p.body.rotation.z = 0;
       });
       for (let t = 0; t < 2; t++) {
-        const idx = view.active[t];
-        markers[t].visible = idx >= 0;
-        if (idx >= 0) { const s = view.players[idx]; markers[t].position.set(s.x, 0, s.z); markers[t].children[1].rotation.y += dt * 3; }
+        // blue ring = you, red ring = opponent (the away player online sees the view flipped)
+        const m = markers[view.flip ? 1 - t : t], idx = view.active[t];
+        m.visible = idx >= 0;
+        if (idx >= 0) { const s = view.players[idx]; m.position.set(s.x, 0, s.z); m.children[1].rotation.y += dt * 3; }
       }
 
       // broadcast camera following the ball; flipped for the away player online
