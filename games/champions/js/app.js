@@ -141,8 +141,8 @@ var FC = window.FC = window.FC || {};
   FC.pickedTeam = () => S.pick.you;
 
   $('btnBot').addEventListener('click', () => { FC.Audio.unlock(); openBotPicker(); });
-  $('btnControls').addEventListener('click', () => show('scrControls'));
-  $('controlsBack').addEventListener('click', () => show('scrTitle'));
+  $('btnControls').addEventListener('click', () => FC.Controls.open('scrTitle'));
+  $('btnPauseControls').addEventListener('click', () => FC.Controls.open('scrPause'));
   $('teamsBack').addEventListener('click', () => { if (S.teamsBack) S.teamsBack(); else show('scrTitle'); });
   $('btnKickoff').addEventListener('click', () => {
     if (S.onlinePick) { if (S.teamsBack) S.teamsBack(); return; }
@@ -209,14 +209,13 @@ var FC = window.FC = window.FC || {};
     const act = { a: 'mentality', m: (cur + 1) % 3 };
     if (S.role === 'guest') FC.Net.sendAction(act); else if (S.match) S.match.queueAction(S.myTeam, act);
   });
-  FC.Input.onPause(() => pause($('scrPause').classList.contains('hidden')));
-  addEventListener('keydown', e => {
-    if (e.code === 'Escape' || e.code === 'KeyP') {
-      if (!$('scrPause').classList.contains('hidden')) pause(false);
-      else if (document.body.classList.contains('playing')) pause(true);
-    }
-    if (e.code === 'KeyM') { const m = FC.Audio.toggleMute(); hint(m ? 'Sound off' : 'Sound on'); setTimeout(() => hint(''), 1200); }
+  // pause / mute keys are rebindable (see FC.Input); they work in a match and on the pause screen
+  FC.Input.onPause(() => {
+    if (!$('scrPause').classList.contains('hidden')) pause(false);
+    else if (document.body.classList.contains('playing')) pause(true);
   });
+  FC.Input.onMute(() => { const m = FC.Audio.toggleMute(); hint(m ? 'Sound off' : 'Sound on'); setTimeout(() => hint(''), 1200); });
+  const K = a => FC.Input.label(a);
 
   // screen-space stick → pitch direction (camera is on the +z side; flipped for the away player online)
   function toWorld(x, y) { const f = S.myTeam === 1 ? -1 : 1; return { x: x * f, z: -y * f }; }
@@ -258,7 +257,7 @@ var FC = window.FC = window.FC || {};
           const mine = e.team === S.myTeam;
           const t = FC.TEAMS[e.team === 0 ? S.cfg.home : S.cfg.away];
           if (e.type === 'penalty') banner('PENALTY!', t.name, 2200);
-          hint(mine ? `Your ${names[e.type].toLowerCase()}: aim and press Pass (J)` : `${names[e.type]} to ${t.name}`);
+          hint(mine ? `Your ${names[e.type].toLowerCase()}: aim and press Pass (${K('pass')})` : `${names[e.type]} to ${t.name}`);
           break;
         }
         case 'foul': if (S.role !== 'demo') FC.Audio.whistle(false); break;
@@ -369,7 +368,7 @@ var FC = window.FC = window.FC || {};
     const sp = h.setpiece, aiming = sp && sp.interactive && sp.team === S.myTeam && h.phase === 'setpiece';
     if (aiming && performance.now() - lastHint > 300) {
       const curl = sp.curl === 0 ? 'none' : sp.curl > 0 ? 'bends right' : 'bends left';
-      hint(`Aim with the stick/WASD · Curl (Q): ${curl} · hold Shoot (K) for power${sp.type === 'penalty' ? '' : ' · Pass (J) to play it short'}`);
+      hint(`Aim with the stick or ${K('up')}${K('left')}${K('down')}${K('right')} · Curl (${K('switch')}): ${curl} · hold Shoot (${K('shoot')}) for power${sp.type === 'penalty' ? '' : ` · Pass (${K('pass')}) to play it short`}`);
       lastHint = performance.now();
     }
     $('sbClock').textContent = h.so ? 'PENS' : h.phase === 'halftime' ? 'HT' : h.phase === 'fulltime' ? 'FT' : `${h.minute}'`;
@@ -387,7 +386,7 @@ var FC = window.FC = window.FC || {};
     $('power').classList.toggle('show', charging);
     $('powerFill').style.width = (FC.Input.chargeLevel() * 100) + '%';
     if (h.phase === 'kickoff' && h.setpiece && h.setpiece.team === S.myTeam && performance.now() - lastHint > 400) {
-      hint('Your kick-off: press Pass (J) to start');
+      hint(`Your kick-off: press Pass (${K('pass')}) to start`);
       lastHint = performance.now();
     } else if (h.phase === 'play' && $('hint').classList.contains('show') && performance.now() - lastHint > 2500) {
       hint(''); lastHint = performance.now();

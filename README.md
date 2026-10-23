@@ -148,6 +148,11 @@ get a celebration orbit and a slow-motion replay.
 Free kicks near goal and penalties: move the gold target, Switch cycles curl, hold Shoot for power.
 Facing a penalty: hold left or right as the kick is taken to dive.
 
+**Changing controls:** *Controls* (main menu or pause menu) lets you rebind every keyboard action
+(main + spare key each) and every gamepad button, switch sprint between hold and tap-to-toggle, and
+pick the touch button size and a left-handed layout (stick on the right). Settings are saved in the
+browser; on-screen hints show your current keys.
+
 **Online play.** *Play Online → Create invite* gives a 6-character code and an invite link; your
 friend enters the code (or opens the link) to join. The host's browser runs the match and the guest
 receives 20 updates per second. The two browsers connect directly over WebRTC, using the free public

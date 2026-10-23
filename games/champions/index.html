@@ -64,10 +64,14 @@
   #touch { position: fixed; inset: 0; pointer-events: none; display: none; }
   body.touch.playing #touch { display: block; }
   body.touch.playing #radar { width: 150px; height: 97px; top: max(54px, env(safe-area-inset-top)); bottom: auto; }
-  .stick { position: absolute; left: max(22px, env(safe-area-inset-left)); bottom: max(22px, env(safe-area-inset-bottom)); width: 128px; height: 128px; border-radius: 50%; background: rgba(255,255,255,.12); border: 2px solid rgba(255,255,255,.35); pointer-events: auto; }
-  .knob { position: absolute; left: 39px; top: 39px; width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,.75); }
-  .tbtns { position: absolute; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(3, 64px); gap: 10px; pointer-events: auto; }
-  .tbtn { width: 64px; height: 64px; border-radius: 50%; border: 2px solid rgba(255,255,255,.5); background: rgba(15, 28, 70, .65); font-family: var(--display); font-weight: 800; font-size: 14px; letter-spacing: .5px; }
+  body { --tb: 64px; --st: 128px; }
+  body.touch-s { --tb: 54px; --st: 108px; } body.touch-l { --tb: 76px; --st: 152px; }
+  .stick { position: absolute; left: max(22px, env(safe-area-inset-left)); bottom: max(22px, env(safe-area-inset-bottom)); width: var(--st); height: var(--st); border-radius: 50%; background: rgba(255,255,255,.12); border: 2px solid rgba(255,255,255,.35); pointer-events: auto; }
+  .knob { position: absolute; left: calc((var(--st) - 50px) / 2); top: calc((var(--st) - 50px) / 2); width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,.75); }
+  .tbtns { position: absolute; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(3, var(--tb)); gap: 10px; pointer-events: auto; }
+  body.touch-swap .stick { left: auto; right: max(22px, env(safe-area-inset-right)); }
+  body.touch-swap .tbtns { right: auto; left: max(16px, env(safe-area-inset-left)); }
+  .tbtn { width: var(--tb); height: var(--tb); border-radius: 50%; border: 2px solid rgba(255,255,255,.5); background: rgba(15, 28, 70, .65); font-family: var(--display); font-weight: 800; font-size: 14px; letter-spacing: .5px; }
   .tbtn.down { background: rgba(240, 195, 90, .7); color: var(--night); }
   .tbtn.shoot { background: rgba(255, 93, 93, .55); }
   #touchPause { position: absolute; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); pointer-events: auto; width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); }
@@ -165,7 +169,26 @@
   #confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   .trophy-card { align-items: center; text-align: center; position: relative; }
   .trophy { width: 140px; height: 175px; filter: drop-shadow(0 8px 24px rgba(240,195,90,.45)); }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+  .tabs button { border: 0; background: transparent; padding: 10px 14px; font-weight: 700; color: var(--muted); border-bottom: 3px solid transparent; }
+  .tabs button.on { color: var(--silver); border-bottom-color: var(--gold); }
+  .binds { display: grid; gap: 6px; }
+  .bh, .bindrow { display: grid; grid-template-columns: minmax(0, 1fr) 120px 120px; gap: 8px; align-items: center; }
+  .bh { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+  .bindrow { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+  .bl { font-size: 14px; min-width: 0; }
+  .slot { padding: 8px 6px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255,255,255,.06); font-weight: 700; font-family: var(--body); }
+  .slot:hover { border-color: var(--silver); }
+  .slot.empty { color: var(--muted); }
+  .slot.listening { border-color: var(--gold); color: var(--gold); background: rgba(240,195,90,.12); }
+  .warn { color: #ffb4b4; font-size: 14px; margin: 0; }
+  .ctlnote { color: var(--good); }
+  .optgrid { display: grid; grid-template-columns: auto 1fr; gap: 14px 18px; align-items: center; }
+  .optgrid .note { display: block; margin-top: 6px; }
+  .btn.danger { border-color: var(--them); color: #ffb4b4; }
   @media (max-width: 640px) {
+    .bh, .bindrow { grid-template-columns: minmax(0, 1fr) 84px 84px; }
+    .optgrid { grid-template-columns: 1fr; }
     .matchup { grid-template-columns: 1fr; }
     .vs { display: none; }
     #radar { width: 150px; height: 97px; }
@@ -224,7 +247,7 @@
       <button class="mbtn" id="btnCup">Champions Cup <small id="cupSub">16-club knockout</small></button>
       <button class="mbtn" id="btnShootout">Penalty Shootout <small>Five kicks each, then sudden death</small></button>
       <button class="mbtn" id="btnOnline">Play Online <small>Invite a friend with a code</small></button>
-      <button class="mbtn" id="btnControls">Controls <small>Keyboard · pad · touch</small></button>
+      <button class="mbtn" id="btnControls">Controls <small>Change keys, buttons and touch layout</small></button>
     </div>
     <div class="record" id="record"></div>
   </div>
@@ -285,28 +308,8 @@
 </section>
 
 <!-- controls -->
-<section class="screen center hidden" id="scrControls">
-  <div class="card">
-    <h2>Controls</h2>
-    <div class="keys">
-      <span><kbd>W A S D</kbd> / <kbd>Arrows</kbd></span><span>Move</span>
-      <span><kbd>Shift</kbd></span><span>Sprint</span>
-      <span><kbd>J</kbd> / <kbd>Z</kbd></span><span>Pass · tackle when defending</span>
-      <span><kbd>L</kbd> / <kbd>C</kbd></span><span>Through ball</span>
-      <span><kbd>I</kbd> / <kbd>V</kbd></span><span>Lob pass · whipped cross from wide in the final third</span>
-      <span><kbd>K</kbd> then <kbd>J</kbd></span><span>Fake shot (press Pass while charging a shot)</span>
-      <span><kbd>Shift</kbd> ×2</span><span>Knock the ball ~5 m ahead and chase it</span>
-      <span><kbd>K</kbd> / <kbd>X</kbd> (hold)</span><span>Shoot (hold for power) · hold sideways to curl a finesse shot · slide tackle when defending</span>
-      <span><kbd>Q</kbd> / <kbd>Space</kbd></span><span>Switch player · hold on the ball to shield it · hold when defending to send a team-mate to press · cycle curl at free kicks</span>
-      <span><kbd>P</kbd> / <kbd>Esc</kbd></span><span>Pause</span>
-      <span><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></span><span>Mentality: defensive · balanced · attacking</span>
-      <span><kbd>M</kbd></span><span>Mute sound</span>
-    </div>
-    <p class="note">Gamepad: left stick move, A pass, B shoot, X lob/cross, Y through ball, LB switch (hold: shield / team-mate press), RB/RT sprint (double-tap: knock-on), D-pad up/left-right/down mentality, Start pause.<br>
-      Touch: stick on the left, buttons on the right. Pass and shoot in the direction you are holding. Hold sideways while shooting to curl it at a post.<br>
-      Press Shoot or Pass as a high ball or pass arrives to head it, volley it or play it first time. Free kicks near goal and penalties: aim the gold target, set curl with Switch, hold Shoot for power.</p>
-    <button class="btn primary" id="controlsBack">Got it</button>
-  </div>
+<section class="screen hidden" id="scrControls">
+  <div class="wrap" id="controlsWrap"></div>
 </section>
 
 <!-- pause -->
@@ -315,6 +318,7 @@
     <h2>Paused</h2>
     <button class="mbtn primary" id="btnResume">Resume</button>
     <button class="mbtn" id="btnRestart">Restart match</button>
+    <button class="mbtn" id="btnPauseControls">Controls</button>
     <button class="mbtn" id="btnQuit">Quit to menu</button>
   </div>
 </section>
@@ -340,6 +344,7 @@
 <script src="js/input.js"></script>
 <script src="js/net.js"></script>
 <script src="js/modes.js"></script>
+<script src="js/controls.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
