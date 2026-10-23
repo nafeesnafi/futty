@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="SpaceSuit Explorer: dress an astronaut, check the suit and complete six space missions. A free educational game for ages 6 to 12.">
+<title>SpaceSuit Explorer · Futt Sepia Games</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="sky" aria-hidden="true">
+  <div class="stars s1"></div><div class="stars s2"></div>
+  <div class="planet p1"></div><div class="planet p2"><div class="moonlet"></div></div>
+</div>
+
+<header class="topbar">
+  <a class="tb-btn" href="../../index.html">← Games</a>
+  <button class="brand" type="button" data-go="welcome" aria-label="SpaceSuit Explorer home">
+    <span class="brand-dot" aria-hidden="true">🚀</span><span>SpaceSuit Explorer</span>
+  </button>
+  <div class="tb-right">
+    <span class="pill" title="Total points"><span aria-hidden="true">⭐</span> <b id="hudPoints">0</b><span class="sr-only"> points</span></span>
+    <button class="tb-btn" type="button" data-go="achievements">My Achievements</button>
+  </div>
+</header>
+
+<main id="main" tabindex="-1">
+  <!-- Welcome -->
+  <section class="screen" id="scr-welcome" aria-labelledby="t-welcome">
+    <div class="welcome">
+      <div class="welcome-art" id="welcomeArt"></div>
+      <div class="welcome-text">
+        <p class="kicker">An astronaut dress-up game</p>
+        <h1 id="t-welcome">SpaceSuit Explorer</h1>
+        <p class="tagline">Dress an Astronaut. Prepare for Discovery.</p>
+        <p class="intro">Pick your astronaut, choose a mission and put together the right spacesuit. Check your gear, finish the safety checklist and head out on six adventures, from spacewalks to the Moon!</p>
+        <div class="btn-col">
+          <button class="btn primary big" type="button" data-go="missions">🚀 Start Your Mission</button>
+          <div class="btn-row">
+            <button class="btn" type="button" data-go="howto">❓ How to Play</button>
+            <button class="btn" type="button" data-go="encyclopedia">📚 Space Suit Encyclopedia</button>
+            <button class="btn" type="button" data-go="achievements">🏅 My Achievements</button>
+          </div>
+        </div>
+        <p class="fine">A learning game for ages 6–12. Not affiliated with or endorsed by NASA. Progress is saved only in this browser.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- How to play -->
+  <section class="screen" id="scr-howto" aria-labelledby="t-howto" hidden>
+    <div class="panel narrow">
+      <h2 id="t-howto">How to Play</h2>
+      <ol class="howto">
+        <li><span class="hi">1</span><div><b>Choose a mission.</b> Each mission card shows where you are going and what you'll learn. Finish a mission to unlock the next one.</div></li>
+        <li><span class="hi">2</span><div><b>Dress your astronaut.</b> Drag gear onto the astronaut, or tap an item and press <b>Put on</b>. Tap an item to read what it does and whether it fits the mission.</div></li>
+        <li><span class="hi">3</span><div><b>Press "Check My Suit".</b> Missing or wrong gear is circled in red. Read why it matters, ask for a hint, fix it and check again.</div></li>
+        <li><span class="hi">4</span><div><b>Inspect your equipment.</b> Read each gauge. Is it good, or does it need fixing?</div></li>
+        <li><span class="hi">5</span><div><b>Finish the safety checklist.</b> Answer each question. Wrong answers explain why, so try again!</div></li>
+        <li><span class="hi">6</span><div><b>Play the mission</b> and earn points and badges. Safe choices earn points, and fixing a mistake earns points too.</div></li>
+      </ol>
+      <p class="fine">Keyboard: use Tab to move, Enter or Space to press. In the Moon mission you can also use the arrow keys to walk.</p>
+      <div class="btn-row"><button class="btn primary" type="button" data-go="missions">Let's go!</button><button class="btn" type="button" data-go="welcome">Back</button></div>
+    </div>
+  </section>
+
+  <!-- Mission select -->
+  <section class="screen" id="scr-missions" aria-labelledby="t-missions" hidden>
+    <div class="panel wide">
+      <div class="row-between">
+        <h2 id="t-missions">Choose Your Mission</h2>
+        <div class="progress-mini" id="missionProgress"></div>
+      </div>
+      <fieldset class="avatars">
+        <legend>Pick your astronaut</legend>
+        <div class="avatar-row" id="avatarRow"></div>
+      </fieldset>
+      <div class="mission-grid" id="missionGrid"></div>
+    </div>
+  </section>
+
+  <!-- Mission flow (dress → inspect → checklist → play → debrief) -->
+  <section class="screen" id="scr-mission" aria-labelledby="t-mission" hidden>
+    <div class="mission-head">
+      <div>
+        <p class="kicker" id="mKicker"></p>
+        <h2 id="t-mission"></h2>
+      </div>
+      <ol class="stepper" id="stepper" aria-label="Mission progress">
+        <li data-step="dress">Dress</li><li data-step="inspect">Inspect</li><li data-step="checklist">Checklist</li><li data-step="play">Mission</li><li data-step="debrief">Debrief</li>
+      </ol>
+      <div class="run-pts" aria-live="polite">Mission points: <b id="runPoints">0</b></div>
+    </div>
+    <div id="stepBody"></div>
+  </section>
+
+  <!-- Encyclopedia -->
+  <section class="screen" id="scr-encyclopedia" aria-labelledby="t-ency" hidden>
+    <div class="panel wide">
+      <h2 id="t-ency">Space Suit Encyclopedia</h2>
+      <p class="sub">Tap a topic to read about it. Open "Learn more" for extra detail. <span id="readCount"></span></p>
+      <div class="ency">
+        <div class="topic-list" id="topicList" role="list"></div>
+        <article class="topic-view" id="topicView" aria-live="polite"></article>
+      </div>
+      <p class="fine">Facts are simplified for young readers and based on NASA's public education pages, linked under each topic. This game is not affiliated with or endorsed by NASA.</p>
+    </div>
+  </section>
+
+  <!-- Achievements -->
+  <section class="screen" id="scr-achievements" aria-labelledby="t-ach" hidden>
+    <div class="panel wide">
+      <h2 id="t-ach">My Achievements</h2>
+      <div class="dash" id="dash"></div>
+      <h3>Badges</h3>
+      <div class="badge-grid" id="badgeGrid"></div>
+      <h3>Missions</h3>
+      <div class="mission-progress" id="missionList"></div>
+      <div class="btn-row end"><button class="btn danger" type="button" id="resetBtn">Reset progress</button></div>
+    </div>
+  </section>
+</main>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<dialog id="modal" aria-labelledby="modalTitle">
+  <div class="modal-icon" id="modalIcon" aria-hidden="true"></div>
+  <h2 id="modalTitle"></h2>
+  <div id="modalBody"></div>
+  <div class="btn-row center" id="modalBtns"></div>
+</dialog>
+
+<script src="js/data.js"></script>
+<script src="js/validate.js"></script>
+<script src="js/astronaut.js"></script>
+<script src="js/missions.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

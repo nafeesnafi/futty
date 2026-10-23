@@ -11,6 +11,8 @@ games/parkour/index.html   ← Sky Runner (3D)
 games/champions/index.html ← Futt Champions (3D, online)
 games/vanguard/index.html  ← Vanguard Web (3D first-person shooter)
 games/duel/index.html      ← Sepia Duel (2D fighting, online)
+games/spacesuit-explorer/  ← SpaceSuit Explorer (astronaut dress-up learning game)
+spacesuit-explorer/        ← short link: /spacesuit-explorer redirects to the game
 games/shared/lib/          ← three.js and PeerJS (vendored, MIT)
 ```
 
@@ -269,3 +271,33 @@ jump kicks must be blocked standing. Crouching ducks under fireballs, and two fi
 and taking hits fills your energy bar. Online play works like Futt Champions: *Play online → Create invite*
 gives a 6-character code and a link, the host's browser runs the fight, and a bot takes over if your friend
 leaves. Records (W/L vs the bot and online) are saved under `fsg.duel`.
+
+## 🧑‍🚀 SpaceSuit Explorer (learning game, ages 6–12)
+
+*Dress an Astronaut. Prepare for Discovery.* Pick an astronaut, choose a mission, build the right suit
+and complete the safety checks. Open it at `/spacesuit-explorer` or `games/spacesuit-explorer/index.html`.
+
+**Flow:** Welcome → choose mission → dress the astronaut → inspect equipment → safety checklist →
+play the mission → debrief (stars, points, badges) → next mission.
+
+**Dress-up:** drag gear onto the astronaut (mouse, or long-press on touch), or tap an item and press
+**Put on**. Nine slots: suit, helmet, comms, gloves, boots, life support, tether, tools and protection.
+**Check My Suit** blocks the mission until the outfit is right: missing, wrong, unneeded, fake or
+non-matching parts are circled in red with an explanation and a hint. Readiness only reaches 100%
+when every slot is correct.
+
+| # | Mission | You learn |
+| --- | --- | --- |
+| 1 | Spacewalk (ISS) | EVA suits, tethers, life support. Repair a solar panel |
+| 2 | Lunar Explorer | Moon dust, temperature extremes, route planning with limited life support |
+| 3 | Launch & Return | Launch-and-entry suits vs EVA suits, air hose, harness, countdown and splashdown |
+| 4 | Life in Orbit | Ordinary clothes inside the station, protective gear only when a task needs it |
+| 5 | Mars Research | A clearly labeled **hypothetical** future mission with concept gear |
+| 6 | Emergency Training | Simulated warnings: stop, identify, checklist, respond |
+
+Missions unlock in order. Points come from correct choices and from fixing mistakes, and there are
+10 badges. A Space Suit Encyclopedia links to NASA's education pages. Progress is saved in
+localStorage (`fsg.spacesuit`), and **My Achievements → Reset progress** clears it after you confirm.
+This game is not affiliated with or endorsed by NASA.
+
+Validation tests: `node --test games/spacesuit-explorer/test/validate.test.js`
