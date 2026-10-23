@@ -18,20 +18,31 @@ var FC = window.FC = window.FC || {};
   };
 
   // ---------- PeerJS setup (query-string overrides allow a self-hosted PeerServer) ----------
-  function peerOptions() {
+  function peerOptions(ice) {
     const q = new URLSearchParams(location.search);
     const o = { debug: 0 };
     if (q.get('peerhost')) {
       o.host = q.get('peerhost'); o.port = +(q.get('peerport') || 443);
       o.path = q.get('peerpath') || '/'; o.secure = q.get('peersecure') !== '0';
     }
-    if (q.get('peerice') === 'none') o.config = { iceServers: [] };
+    if (ice && window.FSGIce) o.config = FSGIce.config(ice); // TURN relays so players on different networks can connect
+    else if (q.get('peerice') === 'none') o.config = { iceServers: [] };
     return o;
   }
+  // fetch relay credentials first (normally already prefetched), then run the step
+  let iceTicket = 0;
+  function withIce(fn) {
+    const t = ++iceTicket;
+    (window.FSGIce ? FSGIce.get() : Promise.resolve(null)).then(ice => { if (t === iceTicket) fn(ice); });
+  }
+  // true when the host answered but the two networks never found a working route (needs a TURN relay)
+  const stuck = (c) => { const pc = c && c.peerConnection; return !!pc && !!pc.remoteDescription && !['connected', 'completed'].includes(pc.iceConnectionState); };
+  const NET_FAIL = "The game was found, but your networks couldn't link up (a strict firewall, VPN or mobile network blocks direct connections, and no relay server answered). Try again, or switch one player to another network.";
   function makeCode() { let s = ''; for (let i = 0; i < 6; i++) s += ALPHABET[(Math.random() * ALPHABET.length) | 0]; return s; }
   function cleanCode(s) { return (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6); }
 
   function destroy() {
+    iceTicket++; // cancels a step still waiting for relay credentials
     try { if (N.conn) N.conn.close(); } catch (_) {}
     try { if (N.peer) N.peer.destroy(); } catch (_) {}
     N.peer = null; N.conn = null; N.inMatch = false; N.snaps = []; N.offset = null; N.rtt = null;
@@ -53,8 +64,12 @@ var FC = window.FC = window.FC || {};
   function host(attempt = 0) {
     destroy();
     if (!window.Peer) { fail('Online play needs the PeerJS library, which didn\'t load.'); return; }
+    withIce(ice => hostNow(attempt, ice));
+  }
+  function hostNow(attempt, ice) {
+    destroy();
     N.role = 'host'; N.code = makeCode(); N.state = 'hosting'; N.error = ''; render();
-    const peer = N.peer = new Peer(PREFIX + N.code, peerOptions());
+    const peer = N.peer = new Peer(PREFIX + N.code, peerOptions(ice));
     peer.on('open', () => render());
     peer.on('connection', conn => {
       if (N.conn && N.conn.open) { conn.on('open', () => { conn.send({ t: 'busy' }); setTimeout(() => conn.close(), 300); }); return; }
@@ -75,14 +90,18 @@ var FC = window.FC = window.FC || {};
     if (code.length !== 6) { N.error = 'Invite codes are 6 characters, like K7QX2M.'; render(); return; }
     destroy();
     if (!window.Peer) { fail('Online play needs the PeerJS library, which didn\'t load.'); return; }
+    withIce(ice => joinNow(code, ice));
+  }
+  function joinNow(code, ice) {
+    destroy();
     N.role = 'guest'; N.code = code; N.state = 'joining'; N.error = ''; render();
-    const peer = N.peer = new Peer(undefined, peerOptions());
+    const peer = N.peer = new Peer(undefined, peerOptions(ice));
     peer.on('open', () => {
       const conn = peer.connect(PREFIX + code, { reliable: true, serialization: 'json' });
       N.conn = conn;
       wire(conn);
       // PeerJS reports a missing host as a peer error; also give up if nothing happens
-      setTimeout(() => { if (N.state === 'joining' && N.code === code) fail(`Couldn't connect to code ${code}. Check the code and that your friend is still waiting.`); }, 15000);
+      setTimeout(() => { if (N.state === 'joining' && N.code === code) fail(stuck(conn) ? NET_FAIL : `Couldn't connect to code ${code}. Check the code and that your friend is still waiting.`); }, 15000);
     });
     peer.on('error', err => { if (!N.inMatch) fail(errorText(err)); });
   }
@@ -288,7 +307,7 @@ var FC = window.FC = window.FC || {};
     const u = new URL(location.href);
     u.search = ''; u.hash = '';
     const q = new URLSearchParams(location.search);
-    for (const k of ['peerhost', 'peerport', 'peerpath', 'peersecure', 'peerice']) if (q.get(k)) u.searchParams.set(k, q.get(k));
+    for (const k of ['peerhost', 'peerport', 'peerpath', 'peersecure', 'peerice', 'turn', 'turnuser', 'turnpass']) if (q.get(k)) u.searchParams.set(k, q.get(k));
     u.searchParams.set('join', N.code);
     return u.toString();
   }

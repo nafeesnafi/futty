@@ -269,3 +269,32 @@ jump kicks must be blocked standing. Crouching ducks under fireballs, and two fi
 and taking hits fills your energy bar. Online play works like Futt Champions: *Play online → Create invite*
 gives a 6-character code and a link, the host's browser runs the fight, and a bot takes over if your friend
 leaves. Records (W/L vs the bot and online) are saved under `fsg.duel`.
+
+## 🌐 Online play between different networks (relay setup)
+
+Futt Champions, Vanguard Web and Sepia Duel connect players' browsers directly (WebRTC). That always works on
+the same Wi-Fi, but between different networks it often doesn't: most mobile networks and many home routers
+(carrier-grade NAT, strict firewalls) block direct connections. Then the game traffic has to go through a
+**TURN relay server**. The free PeerJS relays the games used before are shared and often unreachable, which is
+why online play could fail outside one Wi-Fi.
+
+The site now has a small serverless function, `api/turn.js`, that gives each player short-lived relay
+credentials (the secret key stays on the server). It needs a relay provider, set up once:
+
+1. **Get a free TURN key from Cloudflare** (recommended; generous free tier). Sign in at
+   [dash.cloudflare.com](https://dash.cloudflare.com), open **Realtime → TURN Server**, create a TURN key,
+   and copy its **Turn Token ID** and **API Token**.
+2. **Add them to Vercel.** In the Vercel project: **Settings → Environment Variables**, add
+   `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_API_TOKEN` (for Production, Preview and Development).
+3. **Redeploy** (Deployments → ⋯ → Redeploy), so the function picks up the new variables.
+4. **Check it.** Open `https://<your-site>/api/turn`: it should show `{"iceServers":[...]}`. A
+   `"No TURN provider configured"` message means the variables aren't set on that deployment yet.
+
+Other providers work too: Metered.ca (`METERED_TURN_DOMAIN`, `METERED_TURN_API_KEY`), or any TURN server
+(`TURN_URLS` comma separated, `TURN_USERNAME`, `TURN_CREDENTIAL`). Without any of these the games still try
+direct connections and the public PeerJS relays, as before. Players on the same network still connect
+directly; the relay is only used when nothing else works.
+
+Testing switches (add to a game's address): `?peerrelay=1` forces every connection through the relay, and
+`?turn=turn:host:3478&turnuser=…&turnpass=…` uses a specific relay server. Invite links keep these settings.
+Code: `games/shared/lib/ice.js` (browser side) and `api/turn.js` (server side).

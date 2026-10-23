@@ -26,11 +26,21 @@
   const cleanCode = (s) => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
   const myName = () => str($('onName').value) || 'Player';
 
-  function peerOptions() {
+  function peerOptions(ice) {
     const q = new URLSearchParams(location.search), o = { debug: 0 };
     if (q.get('peerhost')) { o.host = q.get('peerhost'); o.port = +(q.get('peerport') || 443); o.path = q.get('peerpath') || '/'; o.secure = q.get('peersecure') !== '0'; }
+    if (ice && window.FSGIce) o.config = FSGIce.config(ice); // TURN relays so players on different networks can connect
     return o;
   }
+  // fetch relay credentials first (normally already prefetched), then run the lobby step
+  let iceTicket = 0;
+  function withIce(fn) {
+    const t = ++iceTicket;
+    (window.FSGIce ? FSGIce.get() : Promise.resolve(null)).then(ice => { if (t === iceTicket) fn(ice); });
+  }
+  // true when the host answered but the two networks never found a working route (needs a TURN relay)
+  const stuck = (c) => { const pc = c && c.peerConnection; return !!pc && !!pc.remoteDescription && !['connected', 'completed'].includes(pc.iceConnectionState); };
+  const NET_FAIL = "The lobby was found, but your networks couldn't link up (a strict firewall, VPN or mobile network blocks direct connections, and no relay server answered). Try again, or switch one player to another network.";
   function errorText(err) {
     const t = err && err.type;
     if (t === 'peer-unavailable') return `No lobby found for code ${N.code}. Check the code, or ask your friend to create a new one.`;
@@ -47,6 +57,7 @@
   function sendTo(id, m) { sendConn(N.conns.get(id), m); }
 
   function destroy() {
+    iceTicket++; // cancels a lobby step still waiting for relay credentials
     if (VG.Voice) VG.Voice.reset();
     for (const c of N.conns.values()) { try { c.close(); } catch (_) { /* ignore */ } }
     try { if (N.host) N.host.close(); } catch (_) { /* ignore */ }
@@ -59,11 +70,15 @@
   function create() {
     destroy();
     if (!window.Peer) return fail('Online play needs the PeerJS library, which didn\'t load.');
+    status('Creating lobby…'); withIce(createNow);
+  }
+  function createNow(ice) {
+    destroy();
     N.role = 'host'; N.code = makeCode(); N.size = +$('onSize').value; N.me = 'h'; N.error = '';
     N.players = [{ id: 'h', name: myName(), team: 0, pid: PREFIX + N.code }];
     N.nextId = 1;
     status('Creating lobby…'); render();
-    const peer = N.peer = new Peer(PREFIX + N.code, peerOptions());
+    const peer = N.peer = new Peer(PREFIX + N.code, peerOptions(ice));
     if (VG.Voice) VG.Voice.attach(peer);
     peer.on('open', () => { status(''); render(); });
     peer.on('connection', (conn) => {
@@ -157,8 +172,12 @@
     if (code.length !== 6) { N.error = 'Lobby codes are 6 characters, like K7QX2M.'; render(); return; }
     destroy();
     if (!window.Peer) return fail('Online play needs the PeerJS library, which didn\'t load.');
+    status('Connecting…'); withIce(ice => joinNow(code, ice));
+  }
+  function joinNow(code, ice) {
+    destroy();
     N.role = 'guest'; N.code = code; N.error = ''; status('Connecting…'); render();
-    const peer = N.peer = new Peer(undefined, peerOptions());
+    const peer = N.peer = new Peer(undefined, peerOptions(ice));
     if (VG.Voice) VG.Voice.attach(peer);
     peer.on('open', () => {
       const conn = N.host = peer.connect(PREFIX + code, { reliable: true, serialization: 'json' });
@@ -166,7 +185,7 @@
       conn.on('data', onGuestData);
       conn.on('close', () => hostGone());
       conn.on('error', () => hostGone());
-      setTimeout(() => { if (N.role === 'guest' && N.code === code && !N.players.length && N.peer === peer) fail(`Couldn't connect to lobby ${code}. Check the code and that the host is still waiting.`); }, 15000);
+      setTimeout(() => { if (N.role === 'guest' && N.code === code && !N.players.length && N.peer === peer) fail(stuck(conn) ? NET_FAIL : `Couldn't connect to lobby ${code}. Check the code and that the host is still waiting.`); }, 15000);
     });
     peer.on('error', (err) => { if (!N.inMatch) fail(errorText(err)); });
   }
@@ -365,7 +384,10 @@
   });
   $('onStart').addEventListener('click', () => { VG.Audio.ui(); hostStart(); });
   $('onCopy').addEventListener('click', () => {
-    const url = location.href.split(/[?#]/)[0] + '?join=' + N.code;
+    const u = new URL(location.href.split(/[?#]/)[0]), q = new URLSearchParams(location.search);
+    u.searchParams.set('join', N.code);
+    for (const k of ['peerhost', 'peerport', 'peerpath', 'peersecure', 'peerice', 'turn', 'turnuser', 'turnpass']) if (q.get(k)) u.searchParams.set(k, q.get(k));
+    const url = u.toString();
     const done = () => { $('onCopy').textContent = 'LINK COPIED'; setTimeout(() => { $('onCopy').textContent = 'COPY INVITE LINK'; }, 1600); };
     if (navigator.share && G.touch) navigator.share({ title: 'Vanguard Web', text: `Join my Vanguard Web lobby: ${N.code}`, url }).catch(() => {});
     else if (navigator.clipboard) navigator.clipboard.writeText(url).then(done, () => status(url));
