@@ -162,6 +162,7 @@
   }
 
   // drop-in replacement for the two renderer.render calls in the frame loop
+  const clearCol = new THREE.Color(), emptyScene = new THREE.Scene();
   PP.render = function (scene, camera, vmScene, vmCamera, showVM, opts) {
     renderer.getDrawingBufferSize(size);
     if (size.x !== rtScene.width || size.y !== rtScene.height) PP.resize();
@@ -171,9 +172,11 @@
     renderer.render(scene, camera);
     // viewmodel into its own transparent target
     renderer.setRenderTarget(rtVM);
-    const cc = renderer.getClearColor(new THREE.Color()), ca = renderer.getClearAlpha();
+    const cc = renderer.getClearColor(clearCol), ca = renderer.getClearAlpha();
     renderer.setClearColor(0x000000, 0); renderer.clear(true, true, false);
-    if (showVM) renderer.render(vmScene, vmCamera);
+    // a multisampled target only resolves into its texture on render(), so an empty scene is drawn
+    // when the gun is hidden (scoped); otherwise the last gun frame would stay on screen
+    renderer.render(showVM ? vmScene : emptyScene, vmCamera);
     renderer.setClearColor(cc, ca);
     // SSAO
     const useAO = opts.ao !== false;
