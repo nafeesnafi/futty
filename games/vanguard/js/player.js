@@ -6,6 +6,7 @@
   const D2R = Math.PI / 180;
   const HIP = new THREE.Vector3(0.17, -0.2, -0.5);
   const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
+  const bPos = new THREE.Vector3(), bVel = new THREE.Vector3(), bUp = new THREE.Vector3();
   const lerp = (a, b, t) => a + (b - a) * t;
   const ease = (t) => t * t * (3 - 2 * t);
 
@@ -22,6 +23,7 @@
       this.vms = {};
       for (const id of VG.WEAPON_ORDER) {
         const vm = VG.buildViewModel(id); vm.rig.visible = false; game.vmRoot.add(vm.rig); this.vms[id] = vm;
+        if (vm.dotFar) { vm.dotFar.position.set(0, 0, -40); game.vmScene.add(vm.dotFar); } // on the camera axis, 40 m out
       }
       this.reset();
     }
@@ -214,7 +216,7 @@
 
       // ---------- firing ----------
       this.boltT -= dt;
-      if (this.boltT > 0 && this.boltT < d.bolt - 0.35 && !this.boltPlayed) { this.boltPlayed = true; A.bolt(); }
+      if (this.boltT > 0 && this.boltT < d.bolt - 0.35 && !this.boltPlayed) { this.boltPlayed = true; A.bolt(); this.ejectBrass(true); }
       const trig = inp.mouse[0];
       if (!trig) this.triggerLatch = false;
       if (trig && this.sprint) { this.sprint = false; this.sprintOut = 0.12; }
@@ -239,6 +241,9 @@
         const r = Math.min(1, dt * 6); this.recTP -= this.recTP * r; this.recTY -= this.recTY * r;
       }
       this.kick *= Math.pow(0.0005, dt);
+      // damped springs for the weapon kick and camera roll
+      this.kickX = (this.kickX || 0) + (this.kickV || 0) * dt; this.kickV = (this.kickV || 0) + (-140 * this.kickX - 15 * this.kickV) * dt;
+      this.rollK = (this.rollK || 0) + (this.rollV || 0) * dt; this.rollV = (this.rollV || 0) + (-90 * this.rollK - 11 * this.rollV) * dt;
 
       // ---------- spread (for crosshair) ----------
       const moveF = Math.min(1, nhs / 4.6);
@@ -265,11 +270,22 @@
       const roll = -str * 0.012 * (1 - adsE) + (this.sliding ? 0.06 : 0);
       this.roll = (this.roll || 0) + (roll - (this.roll || 0)) * Math.min(1, dt * 8);
       cam.rotation.set(this.pitch + this.recP + swP + (Math.random() - 0.5) * shake * 0.04,
-        this.yaw + this.recY + swY + (Math.random() - 0.5) * shake * 0.04, this.roll, 'YXZ');
+        this.yaw + this.recY + swY + (Math.random() - 0.5) * shake * 0.04, this.roll + this.rollK * 0.03, 'YXZ');
 
       // ---------- viewmodel ----------
       this.updateViewModel(dt, now, adsE, scoped, crouched);
       this.lookDX = 0; this.lookDY = 0;
+    }
+
+    // spent case out of the ejection port, in world space
+    ejectBrass(late) {
+      const vm = this.vms[this.cur], cam = this.game.camera;
+      if (!vm.port || this.scopedNow) return;
+      const pos = bPos; vm.port.getWorldPosition(pos); cam.localToWorld(pos);
+      const vel = bVel.set(1, 0, 0).applyQuaternion(cam.quaternion).multiplyScalar(2.2 + Math.random());
+      vel.addScaledVector(bUp.set(0, 1, 0).applyQuaternion(cam.quaternion), 1.5 + Math.random() * 0.8);
+      vel.x += this.vel.x; vel.z += this.vel.z;
+      VG.FX.brass(pos.x, pos.y, pos.z, vel.x, vel.y, vel.z, this.def.id === 'sniper' ? 1.6 : 1);
     }
 
     startSlide() {
@@ -292,7 +308,7 @@
       if (spr > 0) {
         const r = Math.sqrt(Math.random()) * Math.tan(spr), th = Math.random() * Math.PI * 2;
         const right = tmp2.set(1, 0, 0).applyQuaternion(cam.quaternion);
-        const up = new THREE.Vector3(0, 1, 0).applyQuaternion(cam.quaternion);
+        const up = bUp.set(0, 1, 0).applyQuaternion(cam.quaternion);
         dir.addScaledVector(right, Math.cos(th) * r).addScaledVector(up, Math.sin(th) * r).normalize();
       }
       // muzzle in world space: viewmodel muzzle is expressed in camera space
@@ -306,7 +322,15 @@
       // feedback
       A.shot(d.sound, true);
       VG.FX.playerFlash(mw.x, mw.y, mw.z);
-      if (!scoped) { vm.flash.visible = true; vm.flash.material.rotation = Math.random() * 6.28; this.flashT = 0.04; }
+      if (!scoped) {
+        vm.flash.visible = true; vm.flash.material.rotation = Math.random() * 6.28; this.flashT = 0.045;
+        vm.prongs.visible = true; vm.prongs.rotation.z = Math.random() * 1.6; vm.prongs.scale.setScalar(0.8 + Math.random() * 0.5);
+      }
+      VG.FX.muzzleSmoke(mw.x, mw.y, mw.z);
+      if (!d.bolt) this.ejectBrass(false);
+      // spring impulses: pitch kick and a little roll (heavier for the sniper)
+      this.kickV = (this.kickV || 0) + (d.id === 'sniper' ? 7 : 2.4) * (0.8 + Math.random() * 0.4);
+      this.rollV = (this.rollV || 0) + (Math.random() - 0.5) * (d.id === 'sniper' ? 1.4 : 0.5);
       const adsK = this.ads > 0.5 ? 0.7 : 1, crK = crouched ? 0.85 : 1;
       this.recTP += d.recoilP * D2R * adsK * crK * (0.85 + Math.random() * 0.3) * (g.recoilMul || 1);
       this.recTY += (Math.random() - 0.42) * 2 * d.recoilY * D2R * adsK;
@@ -349,9 +373,19 @@
       // switch: lower then raise
       if (this.nextWpn) { const t = this.switchT; dip = Math.max(dip, t > 0.22 ? ease(1 - (t - 0.22) / 0.2) : ease(t / 0.22)); }
       p.y -= dip * 0.32; p.z += dip * 0.05; rx -= dip * 0.7; rz += dip * 0.3;
+      p.z += this.kickX * 0.05; rx += this.kickX * 0.12; rz += this.rollK * 0.06;
       rig.position.copy(p); rig.rotation.set(rx, ry, rz);
       root.visible = !scoped && this.alive;
-      if (this.flashT > 0) { this.flashT -= dt; if (this.flashT <= 0) vm.flash.visible = false; }
+      if (this.flashT > 0) { this.flashT -= dt; if (this.flashT <= 0) { vm.flash.visible = false; vm.prongs.visible = false; } }
+      // collimated red dot: only visible while you are actually looking through the hood
+      if (vm.dotFar) {
+        let show = false;
+        if (adsE > 0.55 && vm.hood && root.visible) {
+          vm.hood.getWorldPosition(tmp);
+          const dz = -tmp.z; show = dz > 0.05 && Math.hypot(tmp.x, tmp.y) / dz < 0.019 / dz * 0.9;
+        }
+        vm.dotFar.visible = show;
+      }
       g.vmCamera.fov = 58 - adsE * 8;
       g.vmCamera.updateProjectionMatrix();
     }

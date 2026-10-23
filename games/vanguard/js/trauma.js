@@ -10,6 +10,7 @@
   T.reset = function () {
     T.nv = false; halT = 30; flick = 0;
     $('view').style.filter = ''; lastFilter = '';
+    if (VG.Post && VG.Post.u) { const u = VG.Post.u; u.sat.value = 1.04; u.sepia.value = 0; u.contrast.value = 1.06; u.bright.value = 1; }
     $('nvOverlay').classList.remove('on');
     document.body.classList.remove('nv');
   };
@@ -35,6 +36,13 @@
     if (+G.settings.gfx === 0) f = '';
     else f = gq ? `saturate(${(1 - gq * 0.85).toFixed(2)}) sepia(${(gq * 0.5).toFixed(2)}) contrast(${(1 + gq * 0.12).toFixed(2)}) brightness(${(1 - gq * 0.12).toFixed(2)})` : '';
     if (flick > 0) { flick -= real; f += ` brightness(${flick % 0.2 > 0.1 ? 0.55 : 1.1})`; }
+    if (VG.Post && VG.Post.active) {
+      // Medium/High: the grade happens inside the post shader for free
+      const u = VG.Post.u;
+      u.sat.value = 1.04 - gq * 0.9; u.sepia.value = gq * 0.5; u.contrast.value = 1.06 + gq * 0.12;
+      u.bright.value = (1 - gq * 0.12) * (flick > 0 ? (flick % 0.2 > 0.1 ? 0.55 : 1.1) : 1);
+      f = '';
+    }
     if (f !== lastFilter) { $('view').style.filter = f; lastFilter = f; }
 
     // ---- heavier recoil ----
