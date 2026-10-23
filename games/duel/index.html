@@ -138,6 +138,7 @@
   </div>
 
 <script src="../shared/lib/peerjs.min.js"></script>
+<script src="../shared/lib/relay.js"></script>
 <script>
 (() => {
   const $ = id => document.getElementById(id);
@@ -1042,9 +1043,18 @@
       remote: { x: 0, up: false, down: false, p: 0, k: 0, s: 0 }, snaps: [], offset: null, lastRecv: 0, pingT: 0, rtt: null,
       sentIn: '', inT: 0, prefill: '' };
 
+    // Direct WebRTC first (fastest). PeerJS already includes free STUN and TURN servers; ?turn=turn:host:port
+    // with &turnuser= and &turnpass= adds your own TURN server (e.g. a free Metered account).
     function peerOptions() {
       const q = new URLSearchParams(location.search), o = { debug: 0 };
       if (q.get('peerhost')) { o.host = q.get('peerhost'); o.port = +(q.get('peerport') || 443); o.path = q.get('peerpath') || '/'; o.secure = q.get('peersecure') !== '0'; }
+      if (q.get('turn')) {
+        o.config = { iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: q.get('turn').split(','), username: q.get('turnuser') || '', credential: q.get('turnpass') || '' },
+          { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' },
+        ] };
+      }
       if (q.get('peerice') === 'none') o.config = { iceServers: [] };
       return o;
     }
@@ -1052,10 +1062,15 @@
     const cleanCode = s => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
     const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     function send(m) { if (N.conn && N.conn.open) { try { N.conn.send(m); } catch (_) {} } }
+    function send(m) { if (N.conn && N.conn.open) { try { N.conn.send(m); } catch (_) {} } }
     function destroy() {
+      clearTimeout(N.fallbackT); clearTimeout(N.giveUpT);
       try { if (N.conn) N.conn.close(); } catch (_) {}
+      try { if (N.trial) N.trial.close(); } catch (_) {}
       try { if (N.peer) N.peer.destroy(); } catch (_) {}
-      N.peer = null; N.conn = null; N.inMatch = false; N.snaps = []; N.offset = null; N.rtt = null;
+      try { if (N.relay) N.relay.close(); } catch (_) {}
+      try { if (N.relayConn && N.relayConn !== N.conn) N.relayConn.close(); } catch (_) {}
+      N.peer = null; N.conn = null; N.trial = null; N.relay = null; N.relayConn = null; N.inMatch = false; N.snaps = []; N.offset = null; N.rtt = null; N.lastTick = -1;
     }
     function errorText(err) {
       const t = err && err.type;
@@ -1072,45 +1087,92 @@
       show('scrOnline'); ui();
     }
 
+    // Hosting listens two ways at once: PeerJS for direct connections, and the internet relay for friends
+    // whose network blocks direct connections. Whichever reaches us first becomes the match connection.
     function host(attempt = 0) {
       destroy();
-      if (!window.Peer) { fail('Online play needs the PeerJS library, which didn\'t load.'); return; }
-      N.role = 'host'; N.code = makeCode(); N.state = 'hosting'; N.error = ''; ui();
+      if (!window.Peer && !window.FSRelay) { fail('Online play needs the networking libraries, which didn\'t load.'); return; }
+      N.role = 'host'; N.code = makeCode(); N.state = 'hosting'; N.error = ''; N.peerDead = false; ui();
+      const incoming = conn => {
+        if (N.conn && N.conn.open) { conn.on('open', () => { conn.send({ t: 'busy' }); setTimeout(() => conn.close(), 300); }); return; }
+        if (N.conn) { const old = N.conn; N.conn = null; try { old.close(); } catch (_) {} }
+        N.conn = conn; wire(conn);
+      };
+      if (window.FSRelay) {
+        N.relay = FSRelay.listen('duel', N.code, incoming);
+        N.relay.onready = () => ui();
+      }
+      if (!window.Peer) { N.peerDead = true; return; }
       const peer = N.peer = new Peer(PREFIX + N.code, peerOptions());
       peer.on('open', () => ui());
-      peer.on('connection', conn => {
-        if (N.conn && N.conn.open) { conn.on('open', () => { conn.send({ t: 'busy' }); setTimeout(() => conn.close(), 300); }); return; }
-        N.conn = conn; wire(conn);
-      });
+      peer.on('connection', incoming);
       peer.on('error', err => {
         if (err.type === 'unavailable-id' && attempt < 3) { host(attempt + 1); return; }
         if (N.inMatch && err.type === 'peer-unavailable') return;
+        // the relay can still bring the guest in, so only give up if it isn't working either
+        if (N.relay) { N.peerDead = true; ui(); return; }
         fail(errorText(err));
       });
       peer.on('disconnected', () => { if (!N.conn && N.state === 'hosting') { try { peer.reconnect(); } catch (_) {} } });
+      // if neither the matchmaking server nor any relay answers, say so
+      N.giveUpT = setTimeout(() => { if (N.state === 'hosting' && !(N.peer && N.peer.open) && !(N.relay && N.relay.ready)) fail('Couldn\'t reach the matchmaking server or the relay. Check your internet connection and try again.'); }, 15000);
     }
+
+    // Joining tries a direct connection first and switches to the internet relay if it hasn't
+    // connected within a few seconds (different networks, mobile data, strict routers).
     function join(code) {
       code = cleanCode(code);
       if (code.length !== 6) { N.error = 'Invite codes are 6 characters, like K7QX2M.'; ui(); return; }
       destroy();
-      if (!window.Peer) { fail('Online play needs the PeerJS library, which didn\'t load.'); return; }
-      N.role = 'guest'; N.code = code; N.state = 'joining'; N.error = ''; ui();
+      if (!window.Peer && !window.FSRelay) { fail('Online play needs the networking libraries, which didn\'t load.'); return; }
+      N.role = 'guest'; N.code = code; N.state = 'joining'; N.error = ''; N.joinNote = 'Trying a direct connection…'; ui();
+      let settled = false, rtcFailed = !window.Peer, relayFailed = !window.FSRelay, relayStarted = false;
+      const adopt = conn => {
+        if (settled || N.code !== code || N.role !== 'guest') { try { conn.close(); } catch (_) {} return; }
+        settled = true; clearTimeout(N.fallbackT); clearTimeout(N.giveUpT);
+        if (N.trial && N.trial !== conn) { try { N.trial.close(); } catch (_) {} }
+        if (conn.relay && N.peer) { try { N.peer.destroy(); } catch (_) {} N.peer = null; }
+        N.trial = null; N.conn = conn;
+        wire(conn, true);
+      };
+      const bothFailed = () => {
+        if (settled || !(rtcFailed && relayFailed) || N.code !== code) return;
+        fail(`Couldn't connect to code ${code}. Check the code and that your friend is still on the invite screen.`);
+      };
+      const startRelay = () => {
+        if (settled || relayStarted || !window.FSRelay || N.code !== code) return;
+        relayStarted = true; N.joinNote = 'Connecting through the internet relay…'; ui();
+        const rc = FSRelay.dial('duel', code);
+        N.relayConn = rc;
+        rc.on('open', () => adopt(rc));
+        rc.on('error', () => { relayFailed = true; bothFailed(); });
+      };
+      N.fallbackT = setTimeout(startRelay, 6000);
+      N.giveUpT = setTimeout(() => { if (!settled && N.code === code) { rtcFailed = relayFailed = true; bothFailed(); } }, 25000);
+      if (!window.Peer) { startRelay(); return; }
       const peer = N.peer = new Peer(undefined, peerOptions());
       peer.on('open', () => {
+        if (settled) return;
         const conn = peer.connect(PREFIX + code, { reliable: true, serialization: 'json' });
-        N.conn = conn; wire(conn);
-        setTimeout(() => { if (N.state === 'joining' && N.code === code) fail(`Couldn't connect to code ${code}. Check the code and that your friend is still waiting.`); }, 15000);
+        N.trial = conn;
+        conn.on('open', () => adopt(conn));
+        conn.on('error', () => { rtcFailed = true; startRelay(); bothFailed(); });
       });
-      peer.on('error', err => { if (!N.inMatch) fail(errorText(err)); });
+      peer.on('error', err => {
+        if (settled) { if (N.conn && !N.conn.relay && !N.inMatch) fail(errorText(err)); return; }
+        rtcFailed = true; startRelay(); bothFailed();
+      });
     }
-    function wire(conn) {
+    function wire(conn, alreadyOpen) {
       N.lastRecv = performance.now();
-      conn.on('open', () => { N.lastRecv = performance.now(); if (N.role === 'guest') send({ t: 'hello', v: PROTOCOL }); });
-      conn.on('data', onData);
-      conn.on('close', onGone); conn.on('error', onGone);
+      N.via = conn.relay ? 'relay' : 'direct';
+      const opened = () => { if (conn !== N.conn) return; N.lastRecv = performance.now(); if (N.role === 'guest') send({ t: 'hello', v: PROTOCOL }); };
+      if (alreadyOpen) opened(); else conn.on('open', opened);
+      conn.on('data', m => { if (conn === N.conn) onData(m); });
+      conn.on('close', () => onGone(conn)); conn.on('error', () => onGone(conn));
     }
-    function onGone() {
-      if (!N.conn) return;
+    function onGone(conn) {
+      if (!N.conn || (conn && conn !== N.conn)) return;
       N.conn = null;
       if (N.role === 'host') {
         if (mode === 'host' && game && game.phase !== 'over') {
@@ -1130,7 +1192,7 @@
       if (!m || typeof m !== 'object') return;
       if (m.t === 'ping') { send({ t: 'pong', ts: m.ts }); return; }
       if (m.t === 'pong') { N.rtt = performance.now() - m.ts; return; }
-      if (m.t === 'bye') { onGone(); return; }
+      if (m.t === 'bye') { onGone(N.conn); return; }
       if (N.role === 'host') {
         if (m.t === 'hello') {
           if (m.v !== PROTOCOL) { send({ t: 'reject' }); return; }
@@ -1181,6 +1243,8 @@
     let evLog = [];
     function pushSnap(m) {
       const s = unpack(m); if (!s) return;
+      if (s.tick <= N.lastTick) return;      // the relay can deliver an old snapshot late
+      N.lastTick = s.tick;
       if (Array.isArray(m.ev)) for (const e of m.ev) if (e && typeof e.n === 'number' && typeof e.k === 'string') evLog.push(e);
       if (evLog.length > 40) evLog = evLog.slice(-40);
       const nowT = performance.now() / 1000 * 60;
@@ -1190,7 +1254,8 @@
     }
     function interpolated() {
       const sn = N.snaps; if (!sn.length) return null;
-      const rt = performance.now() / 1000 * 60 + N.offset - 4;     // ~66 ms behind the newest snapshot
+      // ~66 ms behind the newest snapshot (~130 ms over the relay, which sends fewer and less evenly)
+      const rt = performance.now() / 1000 * 60 + N.offset - (N.via === 'relay' ? 8 : 4);
       let i = sn.length - 1;
       while (i > 0 && sn[i - 1].tick > rt) i--;
       const b = sn[i], a = sn[i - 1], newest = sn[sn.length - 1];
@@ -1218,7 +1283,7 @@
         $('olJoin').onclick = () => join($('olCode').value);
         $('olCode').onkeydown = e => { if (e.key === 'Enter') join($('olCode').value); };
       } else if (N.state === 'hosting') {
-        const ready = N.peer && N.peer.open;
+        const ready = (N.peer && N.peer.open) || (N.relay && N.relay.ready);
         body.innerHTML = `
           <div class="lbl">Your invite code</div>
           <div class="bigcode">${ready ? N.code : '······'}</div>
@@ -1228,7 +1293,7 @@
         $('olCopy').onclick = function () {
           const u = new URL(location.href); u.search = ''; u.hash = '';
           const q = new URLSearchParams(location.search);
-          for (const k of ['peerhost', 'peerport', 'peerpath', 'peersecure', 'peerice']) if (q.get(k)) u.searchParams.set(k, q.get(k));
+          for (const k of ['peerhost', 'peerport', 'peerpath', 'peersecure', 'peerice', 'relay', 'turn', 'turnuser', 'turnpass']) if (q.get(k)) u.searchParams.set(k, q.get(k));
           u.searchParams.set('join', N.code);
           const b = this;
           const done = () => { b.textContent = 'Copied'; setTimeout(() => (b.textContent = 'Copy invite link'), 1400); };
@@ -1237,15 +1302,15 @@
         };
         $('olCancel').onclick = () => { leave(); ui(); };
       } else if (N.state === 'joining') {
-        body.innerHTML = `<p>Connecting to <b>${esc(N.code)}</b>…</p><div class="row"><button id="olCancel">Cancel</button></div>`;
+        body.innerHTML = `<p>Connecting to <b>${esc(N.code)}</b>…</p><p style="font-size:13px;opacity:.75">${esc(N.joinNote || '')}</p><div class="row"><button id="olCancel">Cancel</button></div>`;
         $('olCancel').onclick = () => { leave(); ui(); };
       } else if (N.state === 'lobby') {
         if (N.role === 'host') {
-          body.innerHTML = `<p>Your friend has joined. You fight as <b>Rook</b> (left), they fight as <b>Ash</b> (right).</p>
+          body.innerHTML = `<p>Your friend has joined${N.via === 'relay' ? ' through the internet relay' : ''}. You fight as <b>Rook</b> (left), they fight as <b>Ash</b> (right).</p>
             <div class="row"><button class="primary" id="olStart">Start the fight</button><button id="olCancel">Leave</button></div>`;
           $('olStart').onclick = startHost;
         } else {
-          body.innerHTML = `<p>Connected! You fight as <b>Ash</b> (right). Waiting for the host to start…</p><div class="row"><button id="olCancel">Leave</button></div>`;
+          body.innerHTML = `<p>Connected${N.via === 'relay' ? ' through the internet relay' : ''}! You fight as <b>Ash</b> (right). Waiting for the host to start…</p><div class="row"><button id="olCancel">Leave</button></div>`;
         }
         $('olCancel').onclick = () => { leave(); ui(); };
       } else body.innerHTML = '';
@@ -1262,7 +1327,8 @@
       remoteInput() { return N.remote; },
       hostTick(g) {
         if (!N.conn) return;
-        if (++snapCount % 2 === 0 || g.ev.some(e => e.n > sentEv)) send(pack(g));
+        // 30 snapshots a second direct, 20 through the relay (public brokers throttle busy clients)
+        if (++snapCount % (N.via === 'relay' ? 3 : 2) === 0 || g.ev.some(e => e.n > sentEv)) send(pack(g));
       },
       guestTick(inp, dt) {
         N.inT -= dt;
@@ -1273,8 +1339,8 @@
         if (!N.conn) return;
         N.pingT -= dt;
         if (N.pingT <= 0) { N.pingT = 2; send({ t: 'ping', ts: performance.now() }); }
-        if (performance.now() - N.lastRecv > 10000) { onGone(); return; }
-        $('netStat').textContent = `Online · ${N.rtt == null ? '…' : Math.round(N.rtt) + ' ms'}`;
+        if (performance.now() - N.lastRecv > 10000) { onGone(N.conn); return; }
+        $('netStat').textContent = `Online · ${N.via === 'relay' ? 'relay' : 'direct'} · ${N.rtt == null ? '…' : Math.round(N.rtt) + ' ms'}`;
       },
     };
   })();

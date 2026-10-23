@@ -275,6 +275,13 @@ same keyboard, or a friend online.
 
 Punches that connect chain into more punches or a kick. Sweeps knock down and must be blocked crouching;
 jump kicks must be blocked standing. Crouching ducks under fireballs, and two fireballs cancel out. Landing
-and taking hits fills your energy bar. Online play works like Futt Champions: *Play online → Create invite*
-gives a 6-character code and a link, the host's browser runs the fight, and a bot takes over if your friend
-leaves. Records (W/L vs the bot and online) are saved under `fsg.duel`.
+and taking hits fills your energy bar. *Play online → Create invite* gives a 6-character code and a link,
+the host's browser runs the fight, and a bot takes over if your friend leaves.
+
+Online play works between any two networks (different Wi-Fi, mobile data). The guest first tries a direct
+WebRTC connection; if that hasn't connected within 6 seconds (common on mobile data and strict routers),
+it switches to an internet relay that passes game messages through free public MQTT brokers
+(`broker.emqx.io`, `broker.hivemq.com`, `test.mosquitto.org`) over secure WebSockets. The status corner
+shows `direct` or `relay`. The relay adds a little delay and is a shared public service, so only game
+data goes through it. Code: `games/shared/lib/relay.js`. Options: `?relay=wss://…` uses your own broker,
+and `?turn=turn:host:port&turnuser=…&turnpass=…` adds your own TURN server for direct connections. Records (W/L vs the bot and online) are saved under `fsg.duel`.
