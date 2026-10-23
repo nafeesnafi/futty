@@ -11,6 +11,8 @@ games/parkour/index.html   ← Sky Runner (3D)
 games/champions/index.html ← Futt Champions (3D, online)
 games/vanguard/index.html  ← Vanguard Web (3D first-person shooter)
 games/duel/index.html      ← Sepia Duel (2D fighting, online)
+games/spacesuit-explorer/  ← SpaceSuit Explorer (astronaut dress-up learning game)
+spacesuit-explorer/        ← short link: /spacesuit-explorer redirects to the game
 games/shared/lib/          ← three.js and PeerJS (vendored, MIT)
 ```
 
@@ -155,16 +157,25 @@ pick the touch button size and a left-handed layout (stick on the right). Settin
 browser; on-screen hints show your current keys.
 
 **Online play.** *Play Online → Create invite* gives a 6-character code and an invite link; your
-friend enters the code (or opens the link) to join. The host's browser runs the match and the guest
-receives 20 updates per second. The two browsers connect directly over WebRTC, using the free public
-[PeerJS](https://peerjs.com) server to find each other (no game server needed). If a guest leaves,
-the bot takes over their team.
+friend enters the code (or opens the link) to join, from anywhere, on Wi-Fi or mobile data. The host's
+browser runs the match and sends the guest 20 updates per second. Two ways to connect, chosen
+automatically:
 
-Online play needs the game served from a normal web address (for example GitHub Pages). Opening the
-file directly works for vs-bot only in some browsers, and sandboxed previews block WebRTC.
+1. **Direct (WebRTC via [PeerJS](https://peerjs.com))**, using public STUN and TURN servers so it also
+   works between different networks.
+2. **Relay**: if no direct connection opens within ~5 s (common on mobile data behind carrier-grade
+   NAT), the match goes through free public MQTT brokers over secure websockets (`js/relay.js`). The
+   host listens on several brokers at once; 15 updates per second with a little more smoothing.
 
-For local testing you can point the game at your own PeerServer:
-`index.html?peerhost=localhost&peerport=9000&peerpath=/myapp&peersecure=0`.
+The lobby shows which one you're on ("direct" or "via relay"). To add your own TURN service, put its
+credentials in `games/champions/js/netconfig.js`. If a guest leaves, the bot takes over their team.
+
+Online play needs the game served from a normal web address (for example GitHub Pages); sandboxed
+previews block outside connections.
+
+For local testing: `index.html?peerhost=localhost&peerport=9000&peerpath=/myapp&peersecure=0` points at
+your own PeerServer, `&mqtt=ws://localhost:8888` at your own MQTT-over-websocket broker, and
+`&relay=1` makes the guest skip the direct attempt.
 
 ## 🎯 Vanguard Web (3D first-person deathmatch)
 
@@ -266,9 +277,46 @@ same keyboard, or a friend online.
 
 Punches that connect chain into more punches or a kick. Sweeps knock down and must be blocked crouching;
 jump kicks must be blocked standing. Crouching ducks under fireballs, and two fireballs cancel out. Landing
-and taking hits fills your energy bar. Online play works like Futt Champions: *Play online → Create invite*
-gives a 6-character code and a link, the host's browser runs the fight, and a bot takes over if your friend
-leaves. Records (W/L vs the bot and online) are saved under `fsg.duel`.
+and taking hits fills your energy bar. *Play online → Create invite* gives a 6-character code and a link,
+the host's browser runs the fight, and a bot takes over if your friend leaves.
+
+Online play works between any two networks (different Wi-Fi, mobile data). The guest first tries a direct
+WebRTC connection; if that hasn't connected within 6 seconds (common on mobile data and strict routers),
+it switches to an internet relay that passes game messages through free public MQTT brokers
+(`broker.emqx.io`, `broker.hivemq.com`, `test.mosquitto.org`) over secure WebSockets. The status corner
+shows `direct` or `relay`. The relay adds a little delay and is a shared public service, so only game
+data goes through it. Code: `games/shared/lib/relay.js`. Options: `?relay=wss://…` uses your own broker,
+and `?turn=turn:host:port&turnuser=…&turnpass=…` adds your own TURN server for direct connections. Records (W/L vs the bot and online) are saved under `fsg.duel`.
+
+## 🧑‍🚀 SpaceSuit Explorer (learning game, ages 6–12)
+
+*Dress an Astronaut. Prepare for Discovery.* Pick an astronaut, choose a mission, build the right suit
+and complete the safety checks. Open it at `/spacesuit-explorer` or `games/spacesuit-explorer/index.html`.
+
+**Flow:** Welcome → choose mission → dress the astronaut → inspect equipment → safety checklist →
+play the mission → debrief (stars, points, badges) → next mission.
+
+**Dress-up:** drag gear onto the astronaut (mouse, or long-press on touch), or tap an item and press
+**Put on**. Nine slots: suit, helmet, comms, gloves, boots, life support, tether, tools and protection.
+**Check My Suit** blocks the mission until the outfit is right: missing, wrong, unneeded, fake or
+non-matching parts are circled in red with an explanation and a hint. Readiness only reaches 100%
+when every slot is correct.
+
+| # | Mission | You learn |
+| --- | --- | --- |
+| 1 | Spacewalk (ISS) | EVA suits, tethers, life support. Repair a solar panel |
+| 2 | Lunar Explorer | Moon dust, temperature extremes, route planning with limited life support |
+| 3 | Launch & Return | Launch-and-entry suits vs EVA suits, air hose, harness, countdown and splashdown |
+| 4 | Life in Orbit | Ordinary clothes inside the station, protective gear only when a task needs it |
+| 5 | Mars Research | A clearly labeled **hypothetical** future mission with concept gear |
+| 6 | Emergency Training | Simulated warnings: stop, identify, checklist, respond |
+
+Missions unlock in order. Points come from correct choices and from fixing mistakes, and there are
+10 badges. A Space Suit Encyclopedia links to NASA's education pages. Progress is saved in
+localStorage (`fsg.spacesuit`), and **My Achievements → Reset progress** clears it after you confirm.
+This game is not affiliated with or endorsed by NASA.
+
+Validation tests: `node --test games/spacesuit-explorer/test/validate.test.js`
 
 ## 🌐 Online play between different networks (relay setup)
 

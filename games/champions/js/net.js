@@ -1,5 +1,9 @@
-// Online play over WebRTC (PeerJS). The host's browser runs the match; the guest sends its controls
-// and draws interpolated snapshots. The invite code is the host's PeerJS id (with a prefix).
+// Online play. The host's browser runs the match; the guest sends its controls and draws interpolated
+// snapshots. Two transports:
+//  1. direct WebRTC via PeerJS (the invite code is the host's PeerJS id, with a prefix), with STUN and
+//     TURN servers so it works across different networks, and
+//  2. a relay through public MQTT brokers (relay.js) when a direct connection can't be made, e.g. on
+//     mobile data behind carrier-grade NAT. The guest falls back to it automatically.
 var FC = window.FC = window.FC || {};
 
 (() => {
@@ -8,6 +12,17 @@ var FC = window.FC = window.FC || {};
   const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const SNAP_EVERY = 0.05;        // 20 snapshots per second
   const INTERP_DELAY = 0.1;       // guest renders 100 ms behind the newest snapshot
+  const RELAY_SNAP_EVERY = 1 / 15, RELAY_INTERP = 0.16;   // gentler rate + more smoothing over the relay
+  const DIRECT_WAIT = 5000;       // guest tries a direct connection this long before using the relay
+  // STUN finds each player's public address; TURN relays the media path when NAT blocks direct traffic.
+  const ICE_SERVERS = [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] },
+    { urls: 'stun:stun.cloudflare.com:3478' },
+    { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' },
+    { urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp', 'turns:openrelay.metered.ca:443'],
+      username: 'openrelayproject', credential: 'openrelayproject' },
+    ...(FC.NET_EXTRA_ICE || []),   // optional: your own TURN credentials (see js/netconfig.js)
+  ];
   const PROTOCOL = 2;
 
   const N = {
@@ -15,38 +30,33 @@ var FC = window.FC = window.FC || {};
     oppTeam: null, halfSeconds: 180, inMatch: false,
     snapT: 0, seq: 0, snaps: [], offset: null, lastRecv: 0, pingT: 0, rtt: null,
     inT: 0, lastIn: '', rematchAsked: false,
+    relays: [], relayReady: false, relayTried: false, peerDown: false, gid: null, timers: [],
   };
 
   // ---------- PeerJS setup (query-string overrides allow a self-hosted PeerServer) ----------
-  function peerOptions(ice) {
+  function peerOptions() {
     const q = new URLSearchParams(location.search);
     const o = { debug: 0 };
     if (q.get('peerhost')) {
       o.host = q.get('peerhost'); o.port = +(q.get('peerport') || 443);
       o.path = q.get('peerpath') || '/'; o.secure = q.get('peersecure') !== '0';
     }
-    if (ice && window.FSGIce) o.config = FSGIce.config(ice); // TURN relays so players on different networks can connect
-    else if (q.get('peerice') === 'none') o.config = { iceServers: [] };
+    o.config = { iceServers: q.get('peerice') === 'none' ? [] : ICE_SERVERS };
     return o;
   }
-  // fetch relay credentials first (normally already prefetched), then run the step
-  let iceTicket = 0;
-  function withIce(fn) {
-    const t = ++iceTicket;
-    (window.FSGIce ? FSGIce.get() : Promise.resolve(null)).then(ice => { if (t === iceTicket) fn(ice); });
-  }
-  // true when the host answered but the two networks never found a working route (needs a TURN relay)
-  const stuck = (c) => { const pc = c && c.peerConnection; return !!pc && !!pc.remoteDescription && !['connected', 'completed'].includes(pc.iceConnectionState); };
-  const NET_FAIL = "The game was found, but your networks couldn't link up (a strict firewall, VPN or mobile network blocks direct connections, and no relay server answered). Try again, or switch one player to another network.";
   function makeCode() { let s = ''; for (let i = 0; i < 6; i++) s += ALPHABET[(Math.random() * ALPHABET.length) | 0]; return s; }
   function cleanCode(s) { return (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6); }
 
   function destroy() {
-    iceTicket++; // cancels a step still waiting for relay credentials
     try { if (N.conn) N.conn.close(); } catch (_) {}
     try { if (N.peer) N.peer.destroy(); } catch (_) {}
+    for (const c of N.relays) try { c.close(); } catch (_) {}
+    for (const t of N.timers) clearTimeout(t);
     N.peer = null; N.conn = null; N.inMatch = false; N.snaps = []; N.offset = null; N.rtt = null;
+    N.relays = []; N.relayReady = false; N.relayTried = false; N.peerDown = false; N.timers = [];
   }
+  const later = (fn, ms) => N.timers.push(setTimeout(fn, ms));
+  const viaRelay = () => !!(N.conn && N.conn.relay);
 
   function send(msg) { if (N.conn && N.conn.open) { try { N.conn.send(msg); } catch (_) {} } }
 
@@ -63,47 +73,111 @@ var FC = window.FC = window.FC || {};
   // ---------- hosting ----------
   function host(attempt = 0) {
     destroy();
-    if (!window.Peer) { fail('Online play needs the PeerJS library, which didn\'t load.'); return; }
-    withIce(ice => hostNow(attempt, ice));
-  }
-  function hostNow(attempt, ice) {
-    destroy();
     N.role = 'host'; N.code = makeCode(); N.state = 'hosting'; N.error = ''; render();
-    const peer = N.peer = new Peer(PREFIX + N.code, peerOptions(ice));
-    peer.on('open', () => render());
-    peer.on('connection', conn => {
-      if (N.conn && N.conn.open) { conn.on('open', () => { conn.send({ t: 'busy' }); setTimeout(() => conn.close(), 300); }); return; }
-      N.conn = conn;
-      wire(conn);
-    });
-    peer.on('error', err => {
-      if (err.type === 'unavailable-id' && attempt < 3) { host(attempt + 1); return; }
-      if (N.inMatch && err.type === 'peer-unavailable') return;
-      fail(errorText(err));
-    });
-    peer.on('disconnected', () => { if (!N.conn && N.state === 'hosting') { try { peer.reconnect(); } catch (_) {} } });
+    const code = N.code;
+    if (window.Peer) {
+      const peer = N.peer = new Peer(PREFIX + code, peerOptions());
+      peer.on('open', () => render());
+      peer.on('connection', conn => {
+        if (N.conn && N.conn.open) { conn.on('open', () => { conn.send({ t: 'busy' }); setTimeout(() => conn.close(), 300); }); return; }
+        N.conn = conn;
+        wire(conn);
+      });
+      peer.on('error', err => {
+        if (err.type === 'unavailable-id' && attempt < 3) { host(attempt + 1); return; }
+        if (N.inMatch && err.type === 'peer-unavailable') return;
+        // direct connections unavailable; the relay can still carry the match
+        N.peerDown = true;
+        if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(err.type)) { try { peer.destroy(); } catch (_) {} if (N.peer === peer) N.peer = null; }
+        if (!N.relayReady && N.relayTried) fail(errorText(err)); else render();
+      });
+      // the signalling server dropped us: retry a few times (with a pause) unless it's unreachable altogether
+      let retries = 0;
+      peer.on('disconnected', () => {
+        if (N.peerDown || N.conn || N.state !== 'hosting' || retries++ > 3) return;
+        later(() => { try { if (N.peer === peer && !peer.destroyed) peer.reconnect(); } catch (_) {} }, 2000 * retries);
+      });
+    } else N.peerDown = true;
+    // listen for guests on every relay broker we can reach
+    const T = FC.Relay.topics(code);
+    let pending = FC.Relay.brokers().length;
+    for (const url of FC.Relay.brokers()) {
+      let client = null;   // this broker's connection (each broker answers on its own)
+      FC.Relay.connect(url, (topic, m) => { if (client) onRelayToHost(client, T, m); }).then(c => {
+        if (N.code !== code || N.role !== 'host') { c.close(); return; }
+        client = c; c.sub(T.host); N.relays.push(c); N.relayReady = true; render();
+      }).catch(() => {}).finally(() => {
+        if (--pending === 0 && N.code === code) {
+          N.relayTried = true;
+          if (!N.relayReady && N.peerDown && N.state === 'hosting') fail('Couldn\'t reach the matchmaking servers. Check your internet connection and try again.');
+        }
+      });
+    }
   }
 
-  // ---------- joining ----------
+  // a message from a guest arrived through a relay broker
+  function onRelayToHost(client, T, m) {
+    if (!m || typeof m.g !== 'string' || !m.d) return;
+    if (N.conn && N.conn.open) {
+      if (N.conn.gid === m.g) N.conn.emit('data', m.d);
+      else if (m.d.t === 'hello') client.pub(T.guest(m.g), { d: { t: 'busy' } });
+      return;
+    }
+    if (m.d.t !== 'hello') return;
+    const conn = FC.Relay.RelayConn(client, T.guest(m.g), d => ({ d }));
+    conn.gid = m.g;
+    N.conn = conn;
+    wire(conn);
+    conn.emit('open');
+    conn.emit('data', m.d);
+  }
+
+  // ---------- joining: direct first, relay as the fallback ----------
   function join(code) {
     code = cleanCode(code);
     if (code.length !== 6) { N.error = 'Invite codes are 6 characters, like K7QX2M.'; render(); return; }
     destroy();
-    if (!window.Peer) { fail('Online play needs the PeerJS library, which didn\'t load.'); return; }
-    withIce(ice => joinNow(code, ice));
-  }
-  function joinNow(code, ice) {
-    destroy();
     N.role = 'guest'; N.code = code; N.state = 'joining'; N.error = ''; render();
-    const peer = N.peer = new Peer(undefined, peerOptions(ice));
-    peer.on('open', () => {
-      const conn = peer.connect(PREFIX + code, { reliable: true, serialization: 'json' });
-      N.conn = conn;
-      wire(conn);
-      // PeerJS reports a missing host as a peer error; also give up if nothing happens
-      setTimeout(() => { if (N.state === 'joining' && N.code === code) fail(stuck(conn) ? NET_FAIL : `Couldn't connect to code ${code}. Check the code and that your friend is still waiting.`); }, 15000);
-    });
-    peer.on('error', err => { if (!N.inMatch) fail(errorText(err)); });
+    const forceRelay = new URLSearchParams(location.search).get('relay') === '1';   // testing aid
+    if (window.Peer && !forceRelay) {
+      const peer = N.peer = new Peer(undefined, peerOptions());
+      peer.on('open', () => {
+        if (N.conn) return;
+        const conn = peer.connect(PREFIX + code, { reliable: true, serialization: 'json' });
+        N.conn = conn;
+        wire(conn);
+      });
+      peer.on('error', () => { if (!N.inMatch && !viaRelay()) joinRelay(code); });
+      later(() => { if (N.code === code && N.state === 'joining' && !(N.conn && N.conn.open)) joinRelay(code); }, DIRECT_WAIT);
+    } else joinRelay(code);
+    later(() => { if (N.code === code && N.state === 'joining') fail(`Couldn't connect to code ${code}. Check the code and that your friend is still waiting.`); }, DIRECT_WAIT + 15000);
+  }
+
+  async function joinRelay(code) {
+    if (N.relayTried || N.code !== code) return;
+    N.relayTried = true;
+    // drop the direct attempt so the host doesn't see two of us
+    try { if (N.conn && !N.conn.relay) N.conn.close(); } catch (_) {}
+    try { if (N.peer) N.peer.destroy(); } catch (_) {}
+    N.peer = null; N.conn = null;
+    N.gid = Math.random().toString(36).slice(2, 12);
+    const T = FC.Relay.topics(code);
+    for (const url of FC.Relay.brokers()) {
+      let conn = null;
+      try {
+        const client = await FC.Relay.connect(url, (topic, m) => { if (conn && m && m.d) conn.emit('data', m.d); });
+        if (N.code !== code || N.state !== 'joining') { client.close(); return; }
+        N.relays.push(client);
+        client.sub(T.guest(N.gid));
+        conn = FC.Relay.RelayConn(client, T.host, d => ({ g: N.gid, d }));
+        N.conn = conn;
+        wire(conn);
+        setTimeout(() => conn.emit('open'), 300);   // give the subscription a moment, then say hello
+        later(() => { if (N.code === code && N.state === 'joining') fail(`No match found for code ${code}. Check the code, or ask your friend to create a new invite.`); }, 9000);
+        return;
+      } catch (_) { /* try the next broker */ }
+    }
+    if (N.code === code) fail('Couldn\'t reach the matchmaking servers. Check your internet connection and try again.');
   }
 
   function fail(msg) {
@@ -233,7 +307,7 @@ var FC = window.FC = window.FC || {};
   function lerpAngle(a, b, t) { let d = b - a; d = Math.atan2(Math.sin(d), Math.cos(d)); return a + d * t; }
   function interpolated() {
     const sn = N.snaps; if (!sn.length) return null;
-    const rt = performance.now() / 1000 + N.offset - INTERP_DELAY;
+    const rt = performance.now() / 1000 + N.offset - (viaRelay() ? RELAY_INTERP : INTERP_DELAY);
     let i = sn.length - 1;
     while (i > 0 && sn[i - 1].c > rt) i--;
     const b = sn[i], a = sn[i - 1];
@@ -257,7 +331,7 @@ var FC = window.FC = window.FC || {};
     N.pingT -= dt;
     if (N.pingT <= 0) { N.pingT = 2; send({ t: 'ping', ts: performance.now() }); }
     if (N.conn && performance.now() - N.lastRecv > 10000) { onGone(); return; }
-    $('netStat').textContent = N.conn ? `Online · ${N.rtt == null ? '…' : Math.round(N.rtt) + ' ms'}` : $('netStat').textContent;
+    $('netStat').textContent = N.conn ? `Online · ${viaRelay() ? 'relay' : 'direct'} · ${N.rtt == null ? '…' : Math.round(N.rtt) + ' ms'}` : $('netStat').textContent;
   }
 
   FC.Net = {
@@ -269,7 +343,7 @@ var FC = window.FC = window.FC || {};
       heartbeat(dt);
       N.snapT -= dt;
       const urgent = evs.some(e => e.e === 'goal' || e.e === 'full' || e.e === 'half' || e.e === 'restart');
-      if (N.snapT <= 0 || urgent) { N.snapT = SNAP_EVERY; send(packSnap(view, hud)); }
+      if (N.snapT <= 0 || urgent) { N.snapT = viaRelay() ? RELAY_SNAP_EVERY : SNAP_EVERY; send(packSnap(view, hud)); }
       const keep = evs.filter(e => e.e !== 'pass' && e.e !== 'possess' && e.e !== 'shot' && e.e !== 'block');
       if (keep.length) send({ t: 'ev', evs: keep });
       if (evs.some(e => e.e === 'full')) N.inMatch = false;
@@ -307,7 +381,7 @@ var FC = window.FC = window.FC || {};
     const u = new URL(location.href);
     u.search = ''; u.hash = '';
     const q = new URLSearchParams(location.search);
-    for (const k of ['peerhost', 'peerport', 'peerpath', 'peersecure', 'peerice', 'turn', 'turnuser', 'turnpass']) if (q.get(k)) u.searchParams.set(k, q.get(k));
+    for (const k of ['peerhost', 'peerport', 'peerpath', 'peersecure', 'peerice']) if (q.get(k)) u.searchParams.set(k, q.get(k));
     u.searchParams.set('join', N.code);
     return u.toString();
   }
@@ -343,9 +417,9 @@ var FC = window.FC = window.FC || {};
           </div>
         </div>
         ${err}
-        <p class="note">Online matches connect your two browsers directly. If a match won't connect, a strict network, VPN or firewall may be blocking it. Try a different network.</p>`;
+        <p class="note">Works across the world, on Wi-Fi or mobile data. The game connects your two browsers directly when it can, and otherwise passes the match through a relay automatically (it can take a few extra seconds to join).</p>`;
     } else if (N.state === 'hosting') {
-      const ready = N.peer && N.peer.open;
+      const ready = (N.peer && N.peer.open) || N.relayReady;
       body = `
         <div class="matchup">${clubHtml(me, 'You · home', true)}<div class="vs">VS</div>${clubHtml(null, 'Friend · away')}</div>
         <div class="card" style="width:auto;align-items:center;text-align:center">
@@ -392,7 +466,7 @@ var FC = window.FC = window.FC || {};
   }
 
   // keep the lobby's ping readout fresh (text only, so buttons aren't redrawn under the player's finger)
-  function pingText() { return N.rtt == null ? 'Connected' : 'Connected · ' + Math.round(N.rtt) + ' ms'; }
+  function pingText() { return `Connected · ${viaRelay() ? 'via relay' : 'direct'}` + (N.rtt == null ? '' : ' · ' + Math.round(N.rtt) + ' ms'); }
   setInterval(() => {
     if (N.conn && !N.inMatch) {
       send({ t: 'ping', ts: performance.now() });
