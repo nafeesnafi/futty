@@ -10,6 +10,7 @@ games/racing/index.html    ← Supercar Rush
 games/parkour/index.html   ← Sky Runner (3D)
 games/champions/index.html ← Futt Champions (3D, online)
 games/vanguard/index.html  ← Vanguard Web (3D first-person shooter)
+games/duel/index.html      ← Sepia Duel (2D fighting, online)
 games/shared/lib/          ← three.js and PeerJS (vendored, MIT)
 ```
 
@@ -230,3 +231,25 @@ and bullets go through wooden crates and railings. Enemies show on the radar for
 Bots patrol, react to gunfire, strafe in fights and retreat to cover when they are hurt. Difficulty
 (Recruit / Regular / Veteran) changes their reaction time, accuracy and damage.
 Code: `games/vanguard/js/` (map, physics, nav, player, bots, weapons, fx, hud, audio, game).
+
+## 🥋 Sepia Duel (2D fighting, vs bot, 2 players or online)
+
+A side-view one-on-one fighting game on a sunset dojo stage. Rook (rust gi) and Ash (slate gi) fight
+best of three rounds (60 seconds each, first to two). Play the bot (Easy / Normal / Hard), a friend on the
+same keyboard, or a friend online.
+
+| Action | vs Bot / Online | 2P: Player 1 | 2P: Player 2 | Touch |
+| --- | --- | --- | --- | --- |
+| Move | A/D or ←/→ | A/D | ←/→ | ◀ ▶ |
+| Jump / crouch | W/S or ↑/↓ | W/S | ↑/↓ | ▲ ▼ |
+| Punch (crouching: low punch) | J or Z | F | , or Num1 | PUNCH |
+| Kick (crouching: sweep, in the air: jump kick) | K or X | G | . or Num2 | KICK |
+| Fireball (costs a third of the energy bar) | L or C | H | / or Num3 | ★ |
+| Block | Hold away from your opponent | | | |
+| Pause | P or Esc | | | |
+
+Punches that connect chain into more punches or a kick. Sweeps knock down and must be blocked crouching;
+jump kicks must be blocked standing. Crouching ducks under fireballs, and two fireballs cancel out. Landing
+and taking hits fills your energy bar. Online play works like Futt Champions: *Play online → Create invite*
+gives a 6-character code and a link, the host's browser runs the fight, and a bot takes over if your friend
+leaves. Records (W/L vs the bot and online) are saved under `fsg.duel`.

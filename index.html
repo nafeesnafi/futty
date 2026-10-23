@@ -70,7 +70,7 @@
       <div><h1>Futt Sepia Games</h1><small>Free browser games · no downloads</small></div>
     </div>
     <div class="stats">
-      <div class="stat"><b id="stGames">5</b><span>Games</span></div>
+      <div class="stat"><b id="stGames">6</b><span>Games</span></div>
       <div class="stat"><b id="stWins">0</b><span>Football wins</span></div>
       <div class="stat"><b id="stBest">—</b><span>Best drive</span></div>
       <div class="stat"><b id="stLevels">0/53</b><span>Parkour levels</span></div>
@@ -79,7 +79,7 @@
 
   <section class="hero">
     <h2>Pick a game and play.</h2>
-    <p>Play 11-a-side Champions League football in 3D, one-on-one football against the CPU, race a Ferrari, Porsche or Bugatti through traffic, run parkour in 3D, or fight bots in a first-person deathmatch. Your records are saved in this browser.</p>
+    <p>Play 11-a-side Champions League football in 3D, one-on-one football against the CPU, race a Ferrari, Porsche or Bugatti through traffic, run parkour in 3D, fight bots in a first-person deathmatch, or go one-on-one in a 2D fighting game. Your records are saved in this browser.</p>
   </section>
 
   <h3>All games</h3>
@@ -191,6 +191,36 @@
       </div>
     </a>
 
+    <a class="card" href="games/duel/index.html">
+      <svg class="thumb" viewBox="0 0 320 180" aria-hidden="true">
+        <rect width="320" height="180" fill="#ecd3a6"/>
+        <circle cx="214" cy="78" r="26" fill="#fbefd4"/>
+        <path d="M0 120 Q60 70 120 104 T240 92 T320 100 V140 H0Z" fill="#b08458"/>
+        <path d="M0 132 Q80 104 160 124 T320 118 V140 H0Z" fill="#8f6640"/>
+        <rect y="136" width="320" height="44" fill="#7a5130"/>
+        <g stroke="#5e3e22" stroke-opacity=".5"><line x1="0" y1="150" x2="320" y2="150"/><line x1="0" y1="166" x2="320" y2="166"/></g>
+        <g stroke-linecap="round" fill="none">
+          <line x1="112" y1="100" x2="108" y2="124" stroke="#8b3a1e" stroke-width="12"/>
+          <line x1="108" y1="124" x2="96" y2="146" stroke="#8b3a1e" stroke-width="8"/>
+          <line x1="108" y1="124" x2="142" y2="112" stroke="#8b3a1e" stroke-width="8"/>
+          <line x1="112" y1="104" x2="134" y2="96" stroke="#8b3a1e" stroke-width="6"/>
+          <line x1="198" y1="98" x2="204" y2="124" stroke="#2f5563" stroke-width="12"/>
+          <line x1="204" y1="124" x2="196" y2="146" stroke="#2f5563" stroke-width="8"/>
+          <line x1="204" y1="124" x2="214" y2="146" stroke="#2f5563" stroke-width="8"/>
+          <line x1="198" y1="102" x2="184" y2="100" stroke="#2f5563" stroke-width="6"/>
+        </g>
+        <circle cx="114" cy="90" r="8" fill="#e3bb8c"/><circle cx="196" cy="88" r="8" fill="#d9ad7c"/>
+        <circle cx="160" cy="104" r="9" fill="#f2b04c" opacity=".9"/>
+        <text x="16" y="30" font-family="Georgia, serif" font-weight="900" font-size="20" fill="#5a3412">VS</text>
+      </svg>
+      <div class="body">
+        <h4>Sepia Duel <span class="new">NEW</span></h4>
+        <p>A 2D one-on-one fighting game. Punch, kick, sweep and throw fireballs against the bot, a friend on the same keyboard, or online.</p>
+        <div class="tags"><span class="tag">Fighting</span><span class="tag">Online</span><span class="tag">Touch</span></div>
+        <div class="foot"><span class="rec" id="recDuel">No fights yet</span><span class="play">Play ▸</span></div>
+      </div>
+    </a>
+
     <div class="card soon" aria-disabled="true">
       <svg class="thumb" viewBox="0 0 320 180" aria-hidden="true">
         <rect width="320" height="180" fill="#8a7458"/>
@@ -230,6 +260,8 @@
     document.getElementById('recParkour').textContent = done >= PK_LEVELS ? `All cleared · ${total.toFixed(1)}s total` : `${done}/${PK_LEVELS} levels cleared`;
   }
   const vg = read('fsg.vanguard', null);
+  const du = read('fsg.duel', null);
+  if (du && du.w + du.l + du.d + du.ow + du.ol) document.getElementById('recDuel').textContent = `W ${du.w + du.ow} · L ${du.l + du.ol}`;
   if (vg) document.getElementById('recVanguard').textContent = `${vg.wins}/${vg.matches} wins · best ${vg.bestKills} kills`;
 </script>
 </body>
