@@ -70,7 +70,7 @@
       <div><h1>Futt Sepia Games</h1><small>Free browser games · no downloads</small></div>
     </div>
     <div class="stats">
-      <div class="stat"><b id="stGames">6</b><span>Games</span></div>
+      <div class="stat"><b id="stGames">7</b><span>Games</span></div>
       <div class="stat"><b id="stWins">0</b><span>Football wins</span></div>
       <div class="stat"><b id="stBest">—</b><span>Best drive</span></div>
       <div class="stat"><b id="stLevels">0/53</b><span>Parkour levels</span></div>
@@ -79,7 +79,7 @@
 
   <section class="hero">
     <h2>Pick a game and play.</h2>
-    <p>Play 11-a-side Champions League football in 3D, one-on-one football against the CPU, race a Ferrari, Porsche or Bugatti through traffic, run parkour in 3D, fight bots in a first-person deathmatch, or go one-on-one in a 2D fighting game. Your records are saved in this browser.</p>
+    <p>Play 11-a-side Champions League football in 3D, one-on-one football against the CPU, race a Ferrari, Porsche or Bugatti through traffic, run parkour in 3D, fight bots in a first-person deathmatch, go one-on-one in a 2D fighting game, or dress an astronaut for six space missions. Your records are saved in this browser.</p>
   </section>
 
   <h3>All games</h3>
@@ -221,6 +221,30 @@
       </div>
     </a>
 
+    <a class="card" href="games/spacesuit-explorer/index.html">
+      <svg class="thumb" viewBox="0 0 320 180" aria-hidden="true">
+        <rect width="320" height="180" fill="#0b1240"/>
+        <g fill="#fff"><circle cx="24" cy="22" r="1.6"/><circle cx="70" cy="54" r="1"/><circle cx="120" cy="16" r="1.4"/><circle cx="260" cy="30" r="1.6"/><circle cx="296" cy="80" r="1"/><circle cx="40" cy="120" r="1.2"/><circle cx="210" cy="14" r="1"/></g>
+        <circle cx="270" cy="140" r="46" fill="#7c5cff" opacity=".8"/><circle cx="56" cy="160" r="26" fill="#2fd3c4" opacity=".6"/>
+        <g transform="translate(160 96) rotate(-8)">
+          <rect x="-34" y="-30" width="68" height="62" rx="12" fill="#e9edf5" stroke="#a7b1c4" stroke-width="3"/>
+          <rect x="-26" y="-14" width="52" height="56" rx="12" fill="#f4f6fb" stroke="#cfd6e4" stroke-width="3"/>
+          <rect x="-26" y="-14" width="52" height="6" fill="#d8343a"/>
+          <path d="M-26 0 L-46 34 M26 0 L46 34" stroke="#f4f6fb" stroke-width="13" stroke-linecap="round"/>
+          <circle cx="0" cy="-36" r="26" fill="#cfe9ff" fill-opacity=".3" stroke="#e9edf5" stroke-width="4"/>
+          <path d="M-20 -40 Q0 -64 20 -40 Q0 -48 -20 -40Z" fill="#f2b632"/>
+          <circle cx="0" cy="-34" r="16" fill="#f2c9a0"/><circle cx="-6" cy="-35" r="2" fill="#2a1a12"/><circle cx="6" cy="-35" r="2" fill="#2a1a12"/><path d="M-5 -28 Q0 -24 5 -28" stroke="#3a2418" stroke-width="2" fill="none"/>
+        </g>
+        <text x="16" y="168" font-family="system-ui, sans-serif" font-weight="800" font-size="13" fill="#ffcc4d">✓ SUIT CHECK</text>
+      </svg>
+      <div class="body">
+        <h4>SpaceSuit Explorer <span class="new">NEW</span></h4>
+        <p>Dress an astronaut, check the suit and complete six missions, from spacewalks to the Moon. A learning game for ages 6 to 12.</p>
+        <div class="tags"><span class="tag">Learning</span><span class="tag">Dress-up</span><span class="tag">Touch</span></div>
+        <div class="foot"><span class="rec" id="recSpacesuit">No missions yet</span><span class="play">Play ▸</span></div>
+      </div>
+    </a>
+
     <div class="card soon" aria-disabled="true">
       <svg class="thumb" viewBox="0 0 320 180" aria-hidden="true">
         <rect width="320" height="180" fill="#8a7458"/>
@@ -262,6 +286,8 @@
   const vg = read('fsg.vanguard', null);
   const du = read('fsg.duel', null);
   if (du && du.w + du.l + du.d + du.ow + du.ol) document.getElementById('recDuel').textContent = `W ${du.w + du.ow} · L ${du.l + du.ol}`;
+  const ss = read('fsg.spacesuit', null);
+  if (ss && ss.done && Object.keys(ss.done).length) document.getElementById('recSpacesuit').textContent = `${Object.keys(ss.done).length}/6 missions · ${ss.badges.length} badges`;
   if (vg) document.getElementById('recVanguard').textContent = `${vg.wins}/${vg.matches} wins · best ${vg.bestKills} kills`;
 </script>
 </body>
