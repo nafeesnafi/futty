@@ -155,16 +155,25 @@ pick the touch button size and a left-handed layout (stick on the right). Settin
 browser; on-screen hints show your current keys.
 
 **Online play.** *Play Online → Create invite* gives a 6-character code and an invite link; your
-friend enters the code (or opens the link) to join. The host's browser runs the match and the guest
-receives 20 updates per second. The two browsers connect directly over WebRTC, using the free public
-[PeerJS](https://peerjs.com) server to find each other (no game server needed). If a guest leaves,
-the bot takes over their team.
+friend enters the code (or opens the link) to join, from anywhere, on Wi-Fi or mobile data. The host's
+browser runs the match and sends the guest 20 updates per second. Two ways to connect, chosen
+automatically:
 
-Online play needs the game served from a normal web address (for example GitHub Pages). Opening the
-file directly works for vs-bot only in some browsers, and sandboxed previews block WebRTC.
+1. **Direct (WebRTC via [PeerJS](https://peerjs.com))**, using public STUN and TURN servers so it also
+   works between different networks.
+2. **Relay**: if no direct connection opens within ~5 s (common on mobile data behind carrier-grade
+   NAT), the match goes through free public MQTT brokers over secure websockets (`js/relay.js`). The
+   host listens on several brokers at once; 15 updates per second with a little more smoothing.
 
-For local testing you can point the game at your own PeerServer:
-`index.html?peerhost=localhost&peerport=9000&peerpath=/myapp&peersecure=0`.
+The lobby shows which one you're on ("direct" or "via relay"). To add your own TURN service, put its
+credentials in `games/champions/js/netconfig.js`. If a guest leaves, the bot takes over their team.
+
+Online play needs the game served from a normal web address (for example GitHub Pages); sandboxed
+previews block outside connections.
+
+For local testing: `index.html?peerhost=localhost&peerport=9000&peerpath=/myapp&peersecure=0` points at
+your own PeerServer, `&mqtt=ws://localhost:8888` at your own MQTT-over-websocket broker, and
+`&relay=1` makes the guest skip the direct attempt.
 
 ## 🎯 Vanguard Web (3D first-person deathmatch)
 
