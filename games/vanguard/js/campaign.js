@@ -6,7 +6,7 @@
   const VG = window.VG, G = VG.Game, P = VG.Phys, N = VG.Nav, A = VG.Audio, FX = VG.FX, S = VG.Story, T = VG.Trauma;
   const $ = (id) => document.getElementById(id);
   const C = VG.Campaign = {};
-  const SAVE = 'fsg.vanguard.campaign';
+  const SAVE = 'fsg.vanguard.campaign6';
   const PI = Math.PI;
 
   let run = 0, cp = { x: 0, y: 0, z: 0, yaw: 0 }, conds = [], tasks = [], level = null, flags = {};
@@ -212,16 +212,77 @@
     T.remember('Hold fire. Hold your fire.');
     S.say([{ who: 'KOVAČ', text: 'Civilian! Hold fire, Miller. Hold your fire!' }]);
   };
+  // ---------- more helpers for the longer campaign ----------
+  function child(name, x, y, z, yaw) { const f = figure(name, x, y, z, yaw); f.baseScale = 0.72; f.tH = 1.3; return f; }
+  // lead the player along a route, stopping to wait whenever they fall behind
+  function guide(f, pts, speed, waitDist) {
+    let i = 0;
+    return task((dt) => {
+      if (i >= pts.length || !f.alive) return true;
+      const pl = G.player;
+      if (Math.hypot(pl.pos.x - f.pos.x, pl.pos.z - f.pos.z) > (waitDist || 7)) { f.tYaw = yawTo(f.pos, pl.pos); return false; }
+      const [x, z] = pts[i], dx = x - f.tgt.x, dz = z - f.tgt.z, d = Math.hypot(dx, dz), step = speed * dt;
+      if (d <= step) { f.tgt.x = x; f.tgt.z = z; i++; } else { f.tgt.x += dx / d * step; f.tgt.z += dz / d * step; f.tYaw = Math.atan2(-dx, -dz); }
+      return i >= pts.length;
+    });
+  }
+  // enemies who come looking for you instead of holding a room
+  function wave(spawns, target, kind) {
+    return spawns.map(([x, z], i) => {
+      const b = kind === 'hale' ? haleSoldier(x, z) : insurgent(x, 0, z, 0, i % 3 === 2 ? 'smg' : 'ar');
+      b.hold = false; b.state = 'investigate'; b.path = null;
+      b.lastKnown = new THREE.Vector3(target[0] + (Math.random() - 0.5) * 6, 0, target[1] + (Math.random() - 0.5) * 6);
+      return b;
+    });
+  }
+  function haleSoldier(x, z) {
+    const b = mkBot('Security team', 1, x, 0, z, 0, Math.random() < 0.6 ? 'ar' : 'smg');
+    b.mats.band.color.setHex(0x111111); b.mats.band.emissive.setHex(0); b.aimMul = 0.85;
+    return b;
+  }
+  // [E] to examine
+  function examine(x, y, z, label) {
+    const it = { x, y, z, label, done: false };
+    it.p = new Promise((r) => { it.res = r; });
+    (level.items || (level.items = [])).push(it);
+    return it;
+  }
+  // a shell landing somewhere near (never right on top of) the player
+  async function mortarRound(area) {
+    const pl = G.player;
+    let x = 0, z = 0;
+    for (let k = 0; k < 8; k++) {
+      x = area[0] + Math.random() * (area[2] - area[0]); z = area[1] + Math.random() * (area[3] - area[1]);
+      if (Math.hypot(x - pl.pos.x, z - pl.pos.z) > 8) break;
+    }
+    A.whistle(); await wait(1.1);
+    FX.explosion(x, 0, z); A.explosion(x, z);
+    FX.shake = Math.max(FX.shake, Math.max(0, 1 - Math.hypot(x - pl.pos.x, z - pl.pos.z) / 30));
+  }
+  function canvasTex(w, h, draw) {
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h; draw(cv.getContext('2d'), w, h);
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t;
+  }
+  function plane(tex, w, h, x, y, z, rotY) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.9 }));
+    m.position.set(x, y, z); m.rotation.y = rotY || 0; level.scene.add(m); return m;
+  }
+  function boundary(x0, z0, x1, z1) { // invisible walls around open maps
+    box(x0 - 1, 0, z0 - 1, x0, 8, z1 + 1, 'concrete', { invisible: true }); box(x1, 0, z0 - 1, x1 + 1, 8, z1 + 1, 'concrete', { invisible: true });
+    box(x0, 0, z0 - 1, x1, 8, z0, 'concrete', { invisible: true }); box(x0, 0, z1, x1, 8, z1 + 1, 'concrete', { invisible: true });
+  }
+
   C.onRespawn = function () {
     for (const b of squad) if (b.alive) { b.pos.set(cp.x + (b.fx || 0) * 0.5, cp.y, cp.z + (b.fz || 0) * 0.5); b.path = null; b.state = 'patrol'; }
   };
 
   // ---------- campaign flow ----------
-  const CHAPTERS = [chapter1, chapter2, chapter3];
+  const CHAPTERS = [prologue, chapter1, market, chapter2, kaserna, chapter3];
+  const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI'];
   C.open = function () {
     const sv = G.store.get(SAVE, null);
     $('campContinue').classList.toggle('hidden', !sv || !sv.chapter);
-    if (sv && sv.chapter) $('campContinue').textContent = `CONTINUE · CHAPTER ${['I', 'II', 'III'][sv.chapter]}`;
+    if (sv && sv.chapter) $('campContinue').textContent = `CONTINUE · CHAPTER ${ROMAN[sv.chapter]}`;
     $('menu').classList.add('hidden'); $('campWarn').classList.remove('hidden');
   };
   C.begin = function (fromSave) {
@@ -279,6 +340,7 @@
     S.clearDialogue(); S.letterbox(false); S.objective('');
     $('decision').classList.add('hidden'); $('tunnel').classList.remove('on');
     $('card').classList.add('hidden'); $('fade').classList.remove('on'); $('campEnd').classList.add('hidden'); $('water').classList.remove('on');
+    $('useHint').textContent = '';
     G.timeScale = 1; G.camHook = null; G.cinematic = false; G.freezeAI = false;
     if (flashlight) { G.camera.remove(flashlight); G.camera.remove(flashlight.target); flashlight = null; }
     T.reset();
@@ -336,6 +398,13 @@
       const hs = Math.hypot(pl.vel.x, pl.vel.z);
       if (wet && hs > 1) { splashT -= real * hs; if (splashT <= 0) { splashT = 2.2; A.splash(); } }
     }
+    // [E] examine
+    let near = null;
+    if (level.items) for (const it of level.items) if (!it.done && Math.hypot(it.x - pl.pos.x, it.z - pl.pos.z) < 1.9 && Math.abs(it.y - pl.pos.y - 0.8) < 2) near = it;
+    const txt = near && !G.cinematic && pl.alive ? `[${G.touch ? 'USE' : G.keyLabel('use')}]  ${near.label}` : '';
+    if ($('useHint').textContent !== txt) $('useHint').textContent = txt;
+    const tu = $('tUse'); if (tu) tu.classList.toggle('show', !!txt);
+    if (near && txt && inp.pressed.KeyE) { near.done = true; A.ui(); near.res(); }
     if (level.extra) level.extra(dt, real);
   };
 
@@ -402,9 +471,9 @@
     squaddie('Rourke', 10.5, 0, -10, PI, -1.5, 1.2);
     squaddie('Davis', 13.5, 0, -10.5, PI, 1.5, 1.4);
     squaddie('Kovač', 12, 0, -11.5, PI, 0, 2.4);
-    ch1.e0 = [insurgent(4, 0, 2.5, PI), insurgent(9, 0, 12, 0)];
-    ch1.e1 = [insurgent(20, 3.2, 2.5, PI), insurgent(11, 3.2, 3, PI), insurgent(5, 3.2, 7, -PI / 2)];
-    ch1.e2 = [insurgent(20, 6.4, 3, PI), insurgent(8.5, 6.4, 12, 0)];
+    ch1.e0 = [insurgent(4, 0, 2.5, PI), insurgent(9, 0, 12, 0), insurgent(20, 0, 2.5, PI)];
+    ch1.e1 = [insurgent(20, 3.2, 2.5, PI), insurgent(11, 3.2, 3, PI), insurgent(5, 3.2, 7, -PI / 2), insurgent(15, 3.2, 12, 0)];
+    ch1.e2 = [insurgent(20, 6.4, 3, PI), insurgent(8.5, 6.4, 12, 0), insurgent(4, 6.4, 2.5, PI)];
     ch1.family = [figure('Old man', 7.5, 3.2, 11.5, 0, { crouch: true }), figure('Woman', 9, 3.2, 12.6, PI / 4, { crouch: true }), figure('Boy', 10.4, 3.2, 12.2, -PI / 6, { crouch: true })];
     level.light = false;
     A.startAmbience({ rain: 1, drone: true, root: 73.4 });
@@ -412,12 +481,12 @@
   chapter1.script = async function (tk) {
     const pl = p();
     S.letterbox(true); G.cinematic = true;
-    await S.card([['small', 'OPERATION: ASHES OF VERDAN'], ['big', 'I. RULES OF ENGAGEMENT'], ['small', 'Block 17, Sector 4 · 02:14 · Day 31 of the siege']], 2.2); guard(tk);
+    await S.card([['small', 'OPERATION: ASHES OF VERDAN'], ['big', 'II. RULES OF ENGAGEMENT'], ['small', 'Block 17, Sector 4 · 02:14 · Day 31 of the siege']], 2.2); guard(tk);
     await say([
       ['OVERLORD', 'Hammer Two-One, OVERLORD Actual. Sorel was sighted in Block 17 two hours ago. Clear it floor by floor.', true],
       ['ROURKE', 'Building\'s still full of families, Colonel.', true],
       ['OVERLORD', 'Then be quick. Rules of engagement are unchanged: hostile act, hostile intent. Use your judgement, Sergeant.', true],
-      ['DAVIS', 'Sarge... my mom made you promise, remember? At the airfield. You bring me home.'],
+      ['DAVIS', 'Sarge... you promised my mom. At Echo. You remember? You bring me home.'],
       ['MILLER', 'I remember, Davis. Stay on my six.'],
       ['KOVAČ', 'Power\'s out across the whole block. Night vision on. Lights if you have to.'],
     ]); guard(tk);
@@ -495,7 +564,7 @@
       S.psyche.civilianCasualties++; S.guilt(35); S.trust(-15);
       T.remember('It\'s just formula.'); T.remember('There\'s a baby in here.');
       flags.motherKilled = true;
-      await chapterDone(tk, 0, [['small', 'Block 17 was reported clear at 03:02.'], ['small', 'One enemy combatant was killed on the second floor.'], ['small', 'Her name was Irena Halas. She was twenty-four.']]);
+      await chapterDone(tk, 1, [['small', 'Block 17 was reported clear at 03:02.'], ['small', 'One enemy combatant was killed on the second floor.'], ['small', 'Her name was Irena Halas. She was twenty-four.']]);
     } else {
       // hesitation: the figure was armed
       fig.tYaw = yawTo(fig.pos, davis.pos); fig.tH = 1.8; fig.guns.smg.group.visible = true;
@@ -524,7 +593,7 @@
       T.remember('I want my mom.'); T.remember('You said you\'d bring me home.');
       flags.davisDead = true;
       squad.splice(squad.indexOf(davis), 1);
-      await chapterDone(tk, 0, [['small', 'Block 17 was reported clear at 03:02.'], ['small', 'Private Thomas Davis, 19, was killed in action.'], ['small', 'The letter to his mother said it was quick.']]);
+      await chapterDone(tk, 1, [['small', 'Block 17 was reported clear at 03:02.'], ['small', 'Private Thomas Davis, 19, was killed in action.'], ['small', 'The letter to his mother said it was quick.']]);
     }
   };
 
@@ -585,7 +654,7 @@
     squaddie('Rourke', -1.5, 0, -1, PI, -1.6, 1.2);
     if (!flags.davisDead) { const d = squaddie('Davis', 1.5, 0, -1.5, PI, 1.6, 1.4); d.quiet = true; }
     squaddie('Kovač', 0, 0, -3, PI, 0, 2.4);
-    ch2.riflemen = [insurgent(6, 0, 40, PI), insurgent(-10, 0, 46, PI), insurgent(3.5, 0, 52, PI), insurgent(-4, 0, 58, PI)];
+    ch2.riflemen = [insurgent(6, 0, 40, PI), insurgent(-10, 0, 46, PI), insurgent(3.5, 0, 52, PI), insurgent(-4, 0, 58, PI), insurgent(-20, 0, 52, PI), insurgent(0, 0, 63, PI), insurgent(10, 0, 34, PI)];
     const s = ch2.sniper = mkBot('Sniper', 1, 18, 14, 59, PI * 0.82, 'sniper');
     s.hold = true; s.holdYaw = PI * 0.82; s.aimMul = 0.28; s.dmgMul = 1.05; s.invuln = true; s.deaf = true; style(s, 'insurgent');
     ch2.civs = [figure('Woman', 14.6, 0, 51.5, -PI / 2, {}), figure('Old man', 14.7, 0, 53, -PI / 2, {}), figure('Girl', 14.4, 0, 52.2, -PI / 2, { crouch: true })];
@@ -596,7 +665,7 @@
   chapter2.script = async function (tk) {
     const pl = p();
     S.letterbox(true); G.cinematic = true;
-    await S.card([['small', 'OPERATION: ASHES OF VERDAN'], ['big', 'II. COLLATERAL PROTOCOL'], ['small', 'St. Agnes Hospital Square · 17:40 · Day 33']], 2.2); guard(tk);
+    await S.card([['small', 'OPERATION: ASHES OF VERDAN'], ['big', 'IV. COLLATERAL PROTOCOL'], ['small', 'St. Agnes Hospital Square · 17:40 · Day 33']], 2.2); guard(tk);
     const lines = [
       ['KOVAČ', 'Locals say forty people are sheltering in the hospital basement. Kids, mostly.'],
       ['ROURKE', 'Tower on the north wing has a shooter. Stay off the open ground.'],
@@ -660,10 +729,14 @@
       S.letterbox(false); G.cinematic = false; G.freezeAI = false; G.camHook = null;
       S.objective('Clear the square');
       await orTime(until(() => allDead(ch2.riflemen)), 120); guard(tk);
+      const cw = wave([[-20, 66], [-10, 68], [0, 68], [-26, 40]], [-2, 40]);
+      await say([['KOVAČ', 'Counter-attack, north side! They want the tower back. There\'s nothing left of it!']]); guard(tk);
+      S.objective('Hold the square');
+      await orTime(until(() => allDead(cw)), 110); guard(tk);
       S.objective('Move to the hospital');
       await until(() => inZone(8, 44, 14, 60)); guard(tk);
       await say([['ROURKE', 'We don\'t stop. If we stop, we don\'t get back up.']]); guard(tk);
-      await chapterDone(tk, 1, [['small', 'The tower at St. Agnes fell at 17:52.'], ['small', 'Twenty-three bodies were recovered from the basement.'], ['small', 'The report listed them as enemy combatants.']]);
+      await chapterDone(tk, 3, [['small', 'The tower at St. Agnes fell at 17:52.'], ['small', 'Twenty-three bodies were recovered from the basement.'], ['small', 'The report listed them as enemy combatants.']]);
     } else {
       S.letterbox(true);
       await say([
@@ -709,6 +782,10 @@
       ch2.sniper.invuln = false; ch2.sniper.aimMul = 0.6;
       S.objective('Kill the sniper in the tower');
       await until(() => !ch2.sniper.alive); guard(tk);
+      const cw = wave([[-20, 66], [-10, 68], [0, 68]], [-2, 46]);
+      await say([['KOVAČ', 'More of them, from the north! Hold here, Sean. Hold!']]); guard(tk);
+      S.objective('Hold the square');
+      await orTime(until(() => allDead(cw.concat(ch2.riflemen))), 120); guard(tk);
       S.objective('Go to the hospital basement');
       await until(() => inZone(8, 46, 14, 58)); guard(tk);
       G.freezeAI = true; G.cinematic = true; S.letterbox(true);
@@ -724,7 +801,7 @@
       S.guilt(20); S.trust(-5);
       T.remember('Get up, Sean. Finish it.'); T.remember('Your war, not ours.');
       flags.rourkeDead = true;
-      await chapterDone(tk, 1, [['small', 'Corporal Elias Rourke was killed in action at 17:58.'], ['small', 'Forty-one people walked out of the basement of St. Agnes.'], ['small', 'None of them knew his name.']]);
+      await chapterDone(tk, 3, [['small', 'Corporal Elias Rourke was killed in action at 17:58.'], ['small', 'Forty-one people walked out of the basement of St. Agnes.'], ['small', 'None of them knew his name.']]);
     }
   };
 
@@ -805,7 +882,8 @@
     if (!flags.rourkeDead) squaddie('Rourke', -1, 0, 0.5, 0, -1, 1.4);
     if (!flags.davisDead) squaddie('Davis', 1, 0, 0.8, 0, 1, 1.6);
     squaddie('Kovač', 0, 0, 1.2, 0, 0, 2.6);
-    ch3.e1 = [insurgent(0.8, 0, -36, 0), insurgent(-1, 0, -50, 0, 'smg')];
+    ch3.e1 = [insurgent(-1, 0, -22, 0), insurgent(1, 0, -29, 0), insurgent(0.8, 0, -36, 0), insurgent(-1, 0, -50, 0, 'smg')];
+    if (flags.prisoner === 'released') { ch3.man = figure('Man from the market', 0.6, 0, -45, PI); style(ch3.man, 'insurgent'); ch3.man.scriptedKill = true; ch3.man.invuln = true; ch3.man.model.visible = false; ch3.man.alive = false; }
     ch3.e2 = [insurgent(-6, 0, -99, 0), insurgent(6, 0, -100, 0), insurgent(0, 0, -106, 0, 'smg')];
     ch3.sorel = figure('Sorel', 0, 0, -121.6, 0, { crouch: true });
     ch3.sorel.mats.vest.color.setHex(0x3a3f45); ch3.sorel.scriptedKill = true; ch3.sorel.surrender = true;
@@ -815,7 +893,7 @@
   chapter3.script = async function (tk) {
     const pl = p(), ps = S.psyche;
     S.letterbox(true); G.cinematic = true;
-    await S.card([['small', 'OPERATION: ASHES OF VERDAN'], ['big', 'III. THE COST OF SURVIVAL'], ['small', 'Verdan dam, drainage tunnels · 04:31 · Day 34']], 2.2); guard(tk);
+    await S.card([['small', 'OPERATION: ASHES OF VERDAN'], ['big', 'VI. THE COST OF SURVIVAL'], ['small', 'Verdan dam, drainage tunnels · 04:31 · Day 34']], 2.2); guard(tk);
     const lines = [['OVERLORD', 'Two-One, OVERLORD Actual. Sorel is wounded and cornered under the dam. Bring him to me.', true],
       ['OVERLORD', 'Correction. Do not bring him to me. Confirm the target is down, Sergeant. That is all I need.', true]];
     if (ps.squadTrust < 40) lines.push(['KOVAČ', 'Whatever you\'re going to do down there, Sean... I don\'t want to see it.']);
@@ -823,6 +901,21 @@
     await say(lines); guard(tk);
     S.letterbox(false); G.cinematic = false;
     S.objective('Find Sorel');
+    if (ch3.man) {
+      await orTime(until(() => allDead(ch3.e1.slice(0, 3)) && pl.pos.z < -30), 150); guard(tk);
+      const m = ch3.man; m.alive = true; m.model.visible = true;
+      G.cinematic = true; G.freezeAI = true; S.letterbox(true);
+      lookAt(new THREE.Vector3(m.pos.x, 1.6, m.pos.z), 3);
+      await say([
+        ['MAN FROM THE MARKET', 'Sergeant. From the market. You let me go.'],
+        ['MAN FROM THE MARKET', 'Sorel has men in the pump hall. Stay on the left wall, behind the pumps. They watch the middle.'],
+        ['MAN FROM THE MARKET', 'Now we are even. Lena says thank you. She does not know for what. God keep you.'],
+      ]); guard(tk);
+      moveAlong(m, [[1.5, -52], [8, -60], [12, -60]], 2).then(() => { m.model.visible = false; m.alive = false; });
+      for (const b of ch3.e2.slice(0, 2)) { b.alive = false; b.model.visible = false; }
+      S.guilt(-6);
+      S.letterbox(false); G.cinematic = false; G.freezeAI = false; G.camHook = null;
+    }
     await until(() => pl.pos.z < -56); guard(tk);
     setCP(0, 0, -58, 0);
     ch3.ghostsOn = true;
@@ -854,7 +947,9 @@
     await say([
       ['SOREL', 'Sergeant Miller. They sent you. Of course they sent you.'],
       ['SOREL', 'Do you know why Hale wants me dead and not in a cell? Kaserna. The ninth of March. Two hundred and six people in a school gymnasium.'],
-      ['SOREL', 'Your colonel gave that order. I have the file. I sent copies out. They found the copies.'],
+      flags.leaked ? ['SOREL', 'But you know. You were in Kaserna. Your medic sent it out. Then Hale knows that you know, and nobody is safe now. Not you either.']
+        : flags.burned ? ['SOREL', 'You were in Kaserna. You saw the names. And you put them back on the wall.']
+          : ['SOREL', 'Your colonel gave that order. I have the file. I sent copies out. They found the copies.'],
       ['SOREL', 'This is wired to the dam. If they bury it, I open the water on the Narrows. Then the whole world comes to look at what is left of Verdan. They will have to.'],
       ['MILLER', 'There are thirty thousand people in the Narrows.'],
       ['SOREL', 'There were two hundred and six in Kaserna. Nobody counted them either.'],
@@ -872,6 +967,398 @@
     else await endingMonster(tk, head);
   };
 
+  // =====================================================================
+  // CHAPTER I — ARRIVAL (Checkpoint Echo at dusk, then the first attack)
+  // =====================================================================
+  const ch0 = {};
+  function prologue() {}
+  prologue.build = function () {
+    newLevel({ bg: 0x4a4038, fog: [30, 150], sky: 0xb4a490, ground: 0x4a4036, hemi: 1.3, moon: 1.4, moonColor: 0xffb070, rain: 0.35, shadows: +G.settings.gfx > 0, center: [0, 28] });
+    // HESCO perimeter with a gate on the north side
+    box(-21, 0, -9, -19.6, 2.4, 34.4, 'cloth', { tex: 2 }); box(19.6, 0, -9, 21, 2.4, 34.4, 'cloth', { tex: 2 }); box(-21, 0, -9, 21, 2.4, -7.6, 'cloth', { tex: 2 });
+    box(-21, 0, 33, -3, 2.4, 34.4, 'cloth', { tex: 2 }); box(3, 0, 33, 21, 2.4, 34.4, 'cloth', { tex: 2 });
+    // tents, containers, bunkers, watchtower
+    box(-15, 0, 0, -9, 2.6, 6, 'cloth'); box(-15, 0, 10, -9, 2.6, 16, 'cloth'); box(8, 0, 2, 14, 2.6, 7, 'cloth'); box(8, 0, 14, 14, 2.6, 19, 'cloth');
+    kit().container(-6, 22, true, 6); kit().container(9, 26, false, 6); kit().crate(-2, 8); kit().crate(-0.8, 8.2, 1); kit().barrel(4, 12); kit().barrel(4.7, 12.6);
+    box(-13, 0, 29.6, -7, 1.1, 30.3, 'cloth'); box(7, 0, 29.6, 13, 1.1, 30.3, 'cloth'); box(-3, 0, 30.6, -1.6, 1.1, 31.2, 'barrier');
+    for (const [x, z] of [[15, 26], [17.2, 26], [15, 28.2], [17.2, 28.2]]) box(x, 0, z, x + 0.3, 4, z + 0.3, 'dark');
+    box(14.8, 4, 25.8, 17.7, 4.3, 28.7, 'plywood');
+    // the ruins the attack comes from
+    box(-24, 0, 42, -10, 7, 52, 'concrete', { tex: 4 }); box(10, 0, 40, 24, 9, 50, 'concrete', { tex: 4 });
+    box(-22, 0, 60, -6, 6, 72, 'rubble', { tex: 4 }); box(6, 0, 60, 22, 8, 72, 'concrete', { tex: 4 });
+    box(-4, 0, 48, -1, 1.2, 49.5, 'rubble'); box(2, 0, 54, 5, 1.3, 55.5, 'rubble'); box(-9, 0, 40, -6, 1, 41, 'rubble');
+    box(-1.5, 0, 42, 1.8, 1.4, 46, 'burnt'); box(6, 0, 36, 8, 1.4, 40, 'burnt');
+    boundary(-24, -10, 24, 74);
+    finishLevel({ x0: -24, z0: -10, x1: 24, z1: 74 });
+    for (const x of [-10, 10]) { const l = new THREE.PointLight(0xfff0d0, 10, 30, 1.5); l.position.set(x, 6, 33); level.scene.add(l); }
+    setCP(0, 0, -4, PI);
+  };
+  prologue.setup = function () {
+    const r = squaddie('Rourke', 0, 0, 31.8, PI, -1.5, 1.2); r.follow = null; r.hold = true; r.holdYaw = PI;
+    squaddie('Davis', 1.5, 0, -5, PI, 1.5, 1.4);
+    const k = squaddie('Kovač', 11, 0, 20.5, 0, 0, 2.4); k.follow = null; k.hold = true; k.holdYaw = PI / 2;
+    ch0.boy = child('Mirko', 0, 0, 36.8, 0);
+    level.light = false;
+    A.startAmbience({ rain: 0.35, drone: true, root: 82.4 });
+  };
+  prologue.script = async function (tk) {
+    const pl = p(), sq = (n) => squad.find(s => s.name === n);
+    S.letterbox(true); G.cinematic = true;
+    await S.card([['small', 'OPERATION: ASHES OF VERDAN'], ['big', 'I. ARRIVAL'], ['small', 'Checkpoint Echo, Verdan outskirts · 18:10 · Day 30 of the siege']], 2.2); guard(tk);
+    await say([
+      ['OVERLORD', 'All Hammer elements, OVERLORD Actual. For the new arrivals: this is Colonel Hale. Welcome to Verdan.', true],
+      ['OVERLORD', 'Our target is Viktor Sorel. He sold the positions of our forward units to the militias. Eleven of ours are dead because of him. Find him.', true],
+      ['DAVIS', 'Eleven. Jesus.'],
+    ]); guard(tk);
+    S.letterbox(false); G.cinematic = false;
+    S.objective('Check in with Kovač at the radio tent');
+    await until(() => inZone(5, 11, 17, 23)); guard(tk);
+    await say([
+      ['KOVAČ', 'Sean. Comms are up. Hale wants Sorel by the end of the week. He sounded very sure about everything.'],
+      ['KOVAČ', 'Davis has been asking for you. Something about his mother.'],
+      ['DAVIS', 'Sarge. My mom... she made me ask you again. Properly. She wants you to promise.'],
+      ['DAVIS', 'Bring him home. That\'s what she said to say. Bring him home.'],
+      ['MILLER', 'Tell her I promise.'],
+      ['DAVIS', 'She\'ll hold you to it. She holds everyone to everything.'],
+    ]); guard(tk);
+    T.remember('Bring him home.');
+    S.objective('Report to Rourke at the north gate');
+    await until(() => inZone(-6, 25, 6, 33)); guard(tk);
+    await say([['ROURKE', 'Quiet today. The kids have mostly stopped coming to the wire.'], ['ROURKE', 'Mostly.']]); guard(tk);
+    // the boy at the wire
+    G.cinematic = true; S.letterbox(true);
+    lookAt(new THREE.Vector3(0, 1.1, 36.8), 3);
+    await say([['BOY', 'Water? Please. Water.'], ['ROURKE', 'No contact with locals. That\'s from Hale. They send the kids to count us.']]); guard(tk);
+    const d = await S.decide({
+      prompt: 'A boy at the wire asks for water.', time: 6, timeoutValue: 'ignored',
+      options: [{ key: 'F', label: 'GIVE HIM YOUR WATER', value: 'water' }, { key: 'E', label: 'SEND HIM AWAY', value: 'away' }],
+    }); guard(tk);
+    S.psyche.choices.ch0 = d.value;
+    if (d.value === 'water') {
+      A.splash();
+      await say([['MILLER', 'Here. Slowly. Slowly.'], ['BOY', 'Hvala. Thank you. I am Mirko. I remember you, water man.'], ['ROURKE', 'Your funeral, Sean.'], ['KOVAČ', 'Ignore him. That was the first decent thing anyone\'s done here all week.']]); guard(tk);
+      flags.gaveWater = true; S.trust(4); T.remember('I remember you, water man.');
+    } else {
+      await say([d.value === 'away' ? ['MILLER', 'Go home, kid. Go on. Go.'] : ['ROURKE', 'Move along. Go. Go!'], ['BOY', '...'], ['KOVAČ', 'He was maybe ten, Sean.']]); guard(tk);
+      flags.gaveWater = false; S.guilt(4);
+    }
+    moveAlong(ch0.boy, [[0, 44], [-8, 52]], 2.2);
+    S.letterbox(false); G.cinematic = false; G.camHook = null;
+    await wait(4); guard(tk);
+    // the attack
+    let barrage = true;
+    (async () => { while (barrage && tk === run) { mortarRound([-17, -4, 17, 30]); await wait(1.4 + Math.random() * 2); } })();
+    await wait(1.2); guard(tk);
+    S.say([{ who: 'ROURKE', text: 'INCOMING! Get down! Everyone to the north wall!' }]);
+    for (const [n, x] of [['Rourke', -10], ['Davis', 10], ['Kovač', 3]]) { const b = sq(n); if (b) { b.follow = null; b.hold = true; b.holdYaw = PI; b.pos.set(x, 0, 31.6); b.path = null; } }
+    S.objective('Get to the north wall');
+    await until(() => pl.pos.z > 25); guard(tk);
+    setCP(0, 0, 29, PI);
+    S.objective('Hold the checkpoint · wave 1 of 3');
+    const w1 = wave([[-14, 62], [-4, 66], [6, 64], [16, 58]], [0, 30]);
+    await orTime(until(() => allDead(w1)), 100); guard(tk);
+    await say([['KOVAČ', 'More movement in the ruins! West side, a lot of them!']]); guard(tk);
+    S.objective('Hold the checkpoint · wave 2 of 3');
+    const w2 = wave([[-18, 56], [-12, 66], [0, 68], [10, 66], [18, 60]], [0, 30]);
+    await orTime(until(() => allDead(w2)), 110); guard(tk);
+    await say([['DAVIS', 'I\'m hit! Sarge, I\'m hit!'], ['KOVAČ', 'Let me see. It\'s a graze, Davis. It\'s a graze. Breathe.'], ['DAVIS', 'A graze. Okay. Okay. Okay.']]); guard(tk);
+    S.objective('Hold the checkpoint · wave 3 of 3');
+    const w3 = wave([[-20, 62], [-14, 70], [-4, 70], [4, 70], [14, 70], [20, 62]], [0, 30]);
+    await orTime(until(() => allDead(w3)), 120); guard(tk);
+    barrage = false;
+    await wait(2); guard(tk);
+    await say([
+      ['OVERLORD', 'Hammer Two-One, OVERLORD. Intelligence confirms the attack on Echo was ordered by Sorel.', true],
+      ['KOVAČ', 'Already? The mortar tubes are still warm.'],
+      ['ROURKE', 'Don\'t, Kovač.'],
+    ]); guard(tk);
+    await chapterDone(tk, 0, [['small', 'The attack on Checkpoint Echo lasted fourteen minutes.'], ['small', 'Command said Sorel ordered it within the hour.'], ['small', 'Nobody asked how they knew so quickly.']]);
+  };
+
+  // =====================================================================
+  // CHAPTER III — THE BOY WHO KNEW THE STREETS (the old market, daylight)
+  // =====================================================================
+  const chM = {};
+  function market() {}
+  market.build = function () {
+    newLevel({ bg: 0x8a9096, fog: [25, 125], sky: 0xc0c8d0, ground: 0x5a564e, hemi: 1.6, moon: 1.1, moonColor: 0xdde4ea, rain: 0.15, shadows: +G.settings.gfx > 0, center: [0, 56] });
+    // west: outer block, back alley (x -14..-9.5) and the street facade with two doors into it
+    box(-24, 0, -8, -14, 8, 84, 'concrete', { tex: 4 });
+    box(-14, 0, -8, -9.5, 7, 8, 'brick'); box(-14, 0, 82, -9.5, 7, 84, 'brick');
+    box(-9.5, 0, 8, -6, 7, 29, 'brick'); box(-9.5, 2.4, 29, -6, 7, 31, 'brick'); box(-9.5, 0, 31, -6, 7, 63, 'brick'); box(-9.5, 2.4, 63, -6, 7, 65, 'brick'); box(-9.5, 0, 65, -6, 7, 82, 'brick');
+    box(-9.5, 0, -8, -6, 7, 8, 'brick');
+    // east: facades, blocks and the shop (x 6..14, z 86..100)
+    box(6, 0, -8, 9.5, 7, 86, 'plaster', { tex: 4 }); box(9.5, 0, -8, 24, 9, 86, 'concrete', { tex: 4 });
+    box(6, 0, 86, 14, 7, 86.4, 'brick'); box(6, 0, 99.6, 14, 7, 100, 'brick'); box(13.6, 0, 86, 14, 7, 100, 'brick');
+    box(6, 0, 86.4, 6.4, 7, 91.5, 'brick'); box(6, 0, 94.5, 6.4, 7, 99.6, 'brick'); box(6, 2.6, 91.5, 6.4, 7, 94.5, 'brick');
+    box(6.4, 3.2, 86.4, 13.6, 3.5, 99.6, 'plaster', { noAO: true });
+    box(14, 0, 86, 24, 9, 100, 'concrete', { tex: 4 }); box(6, 0, 100, 9.5, 7, 115, 'plaster', { tex: 4 }); box(9.5, 0, 100, 24, 9, 115, 'concrete', { tex: 4 });
+    // the collapsed overpass blocks the main street
+    box(-6, 0, 50, 6, 3.2, 56, 'rubble'); box(-6, 3.2, 48, 6, 3.8, 58, 'concrete');
+    // market square and the north gate (APC outside)
+    box(-24, 0, 84, -20, 8, 115, 'concrete', { tex: 4 }); box(-24, 0, 115, -3, 8, 117, 'concrete', { tex: 4 }); box(3, 0, 115, 24, 8, 117, 'concrete', { tex: 4 });
+    box(-1.4, 0, 118, 1.4, 2.4, 124, 'contGreen', { tex: 2 }); box(-6, 0, 124, 6, 6, 126, 'concrete'); box(-6, 0, 117, -3, 6, 126, 'concrete', { invisible: true }); box(3, 0, 117, 6, 6, 126, 'concrete', { invisible: true });
+    box(-6, 0, -9, 6, 6, -8, 'concrete');
+    // stalls, carts, crates
+    const stall = (x, z) => { box(x - 1, 0, z - 0.6, x + 1, 0.9, z + 0.6, 'plywood', { pen: true, tex: 1 }); kit().visBox(x - 1.25, 2.2, z - 0.9, x + 1.25, 2.3, z + 0.9, 'cloth', { noAO: true }); };
+    for (const [x, z] of [[-3, 12], [3, 20], [-3, 36], [3, 42], [-3, 62], [3, 72], [-2, 78], [-18, 90], [-12, 96], [-17, 104], [-10, 108], [-5, 92]]) stall(x, z);
+    kit().crate(-12, 20); kit().crate(-11, 48); kit().crate(-12.5, 70); kit().crate(-12, 70.2, 1, 1.2); kit().barrel(-13, 36); kit().barrel(-10.3, 58);
+    box(1.5, 0, 26, 3.5, 1.4, 30, 'burnt'); box(-4, 0, 66, -1.5, 1.3, 70, 'burnt'); kit().crate(2, 86); kit().crate(-8, 112); kit().barrel(-21, 96);
+    box(-15, 0, 99, -13, 0.6, 101.5, 'dark'); // the drone
+    finishLevel({ x0: -24, z0: -8, x1: 24, z1: 126 });
+    const blink = new THREE.PointLight(0xff3020, 0, 5, 2); blink.position.set(-14, 0.9, 100.2); level.scene.add(blink);
+    const bulb = new THREE.PointLight(0xffc880, 4, 9, 1.6); bulb.position.set(10, 2.9, 93); level.scene.add(bulb);
+    level.extra = () => { blink.intensity = Math.sin(G.now * 6) > 0.6 ? 3 : 0; bulb.intensity = Math.random() < 0.02 ? 1 : 4; };
+    setCP(0, 0, 2, PI);
+  };
+  market.setup = function () {
+    squaddie('Rourke', -1.5, 0, 0, PI, -1.5, 1.2);
+    if (!flags.davisDead) squaddie('Davis', 1.5, 0, -0.5, PI, 1.5, 1.4);
+    squaddie('Kovač', 0, 0, -2, PI, 0, 2.4);
+    chM.mirko = child('Mirko', 1.5, 0, 6, PI);
+    chM.alley = [insurgent(-12, 0, 46, PI), insurgent(-11, 0, 56, PI), insurgent(-12.5, 0, 75, PI)];
+    chM.street = [insurgent(2, 0, 70, PI), insurgent(-3, 0, 77, PI)];
+    chM.square = [[-19, 98], [-12, 102], [-8, 92], [-20, 110], [-14, 112], [2, 104]].map(([x, z]) => insurgent(x, 0, z, yawTo({ x, z }, { x: 0, z: 80 })));
+    level.light = false;
+    A.startAmbience({ rain: 0.15, drone: true, root: 69.3 });
+  };
+  market.script = async function (tk) {
+    const pl = p(), mirko = chM.mirko;
+    S.letterbox(true); G.cinematic = true;
+    await S.card([['small', 'OPERATION: ASHES OF VERDAN'], ['big', 'III. THE BOY WHO KNEW THE STREETS'], ['small', 'The old market, Sector 2 · 11:20 · Day 32']], 2.2); guard(tk);
+    const intro = [['OVERLORD', 'Two-One, a recon drone went down in the old market. Its data module has Sorel\'s movements. Recover it.', true]];
+    if (flags.davisDead) intro.push(['ROURKE', 'Nobody talks about Davis today. We do the job.']);
+    else if (flags.motherKilled) intro.push(['KOVAČ', 'Davis asked me if she had a name. The woman. I told him I didn\'t know. I knew.']);
+    if (flags.gaveWater) intro.push(['MIRKO', 'Water man! You came. Big street has eyes, big gun at the end. I know the back way.'], ['MILLER', 'Lead on, Mirko.']);
+    else intro.push(['KOVAČ', 'This kid says he knows a way around the main street. He wants two ration packs.'], ['MIRKO', 'Three. For my sister.'], ['ROURKE', 'Give him three.']);
+    await say(intro); guard(tk);
+    S.letterbox(false); G.cinematic = false;
+    S.objective('Follow Mirko');
+    await guide(mirko, [[1.5, 20], [-2, 28], [-7.8, 30], [-11.8, 30.5], [-11.8, 39]], 3.4, 7); guard(tk);
+    mirko.tH = 0.9;
+    await say([['MIRKO', 'Men with guns, further up. I wait here. Quiet.']]); guard(tk);
+    setCP(-11.8, 0, 33, PI);
+    S.objective('Clear the alley');
+    await orTime(until(() => allDead(chM.alley)), 120); guard(tk);
+    mirko.tH = 1.3;
+    S.say([{ who: 'MIRKO', text: 'Good. Good. This way, back to the big street, past the broken bridge.' }]);
+    S.objective('Follow Mirko');
+    await guide(mirko, [[-11.8, 62], [-7.8, 64], [-3, 66]], 3.4, 8); guard(tk);
+    setCP(-3, 0, 64, PI);
+    mirko.tH = 0.9;
+    S.objective('Push into the market square');
+    await until(() => pl.pos.z > 82); guard(tk);
+    setCP(-2, 0, 82, PI);
+    S.objective('Clear the market square');
+    await orTime(until(() => allDead(chM.square) && allDead(chM.street)), 150); guard(tk);
+    mirko.pos.set(-2, 0, 84); mirko.tgt.set(-2, 0, 84); mirko.tH = 1.3;
+    S.objective('Recover the data module from the drone');
+    await examine(-14, 0.4, 100.2, 'Take the data module').p; guard(tk);
+    await say([['KOVAČ', 'Got it? Good. OVERLORD, module recovered.', true], ['OVERLORD', 'Copy. Extract north. The APC is waiting at the gate.', true],
+      ['ROURKE', 'Hold up. The shop on the east side. Somebody\'s in there.']]); guard(tk);
+    // the man in the shop
+    const pr = chM.prisoner = figure('Wounded man', 11.8, 0, 93, PI / 2, { crouch: true });
+    style(pr, 'insurgent'); pr.invuln = true; pr.scriptedKill = true; pr.tH = 1.15;
+    S.objective('Check the shop');
+    await until(() => inZone(6.2, 86.5, 13.6, 99.5)); guard(tk);
+    G.cinematic = true; G.freezeAI = true; S.letterbox(true);
+    lookAt(new THREE.Vector3(11.8, 0.9, 93), 3);
+    await say([
+      ['WOUNDED MAN', 'Don\'t. Please don\'t. I put it down. Look. I put it down.'],
+      ['WOUNDED MAN', 'I have a daughter. Lena. She is six. Please.'],
+      ['ROURKE', 'He\'s seen our numbers. We leave him, he\'s on a radio before we reach the APC.'],
+      ['OVERLORD', 'Two-One, you are not taking detainees today. Is that understood?', true],
+      ['KOVAČ', 'He\'s bleeding out anyway, Sean. One way or another.'],
+    ]); guard(tk);
+    const d = await S.decide({
+      prompt: 'He has his hands up. Everyone is looking at you.', time: 6, timeoutValue: 'rourke',
+      options: [{ key: 'F', label: 'EXECUTE HIM', value: 'executed' }, { key: 'E', label: 'LET HIM GO', value: 'released' }, { key: 'Q', label: 'BRING HIM WITH US', value: 'carried' }],
+    }); guard(tk);
+    S.psyche.choices.ch2b = d.value; flags.prisoner = d.value;
+    pr.invuln = false;
+    const rourke = squad.find(s => s.name === 'Rourke');
+    if (d.value === 'executed') {
+      A.shot('ar', true); FX.playerFlash(G.camera.position.x, G.camera.position.y, G.camera.position.z); killScripted(pr, pl.pos);
+      await wait(1.5); guard(tk);
+      await say([['ROURKE', 'It had to be done.'], ['KOVAČ', 'Say that again tomorrow. Say it every day.']]); guard(tk);
+      S.guilt(25); S.trust(-6); T.remember('I have a daughter. Lena.');
+    } else if (d.value === 'rourke') {
+      await S.line('ROURKE', 'Then I\'ll do it.'); guard(tk);
+      muzzleAt(rourke, 'ar'); killScripted(pr, rourke.pos);
+      await wait(1.5); guard(tk);
+      await say([['KOVAČ', 'You let him decide for you. That\'s worse, Sean. That\'s worse.']]); guard(tk);
+      S.guilt(20); S.trust(-12); T.remember('I have a daughter. Lena.');
+    } else if (d.value === 'released') {
+      await say([['MILLER', 'Go. Get out of here. If I see you again—'], ['WOUNDED MAN', 'You won\'t. God keep you, Sergeant.']]); guard(tk);
+      pr.tH = 1.6; pr.surrender = false;
+      moveAlong(pr, [[7, 93], [2, 96], [-4, 104], [-12, 112]], 2).then(() => { pr.model.visible = false; pr.alive = false; });
+      await say([['ROURKE', 'That man is going to kill one of us. You know that.']]); guard(tk);
+      S.guilt(5); S.trust(-8);
+    } else {
+      await say([['MILLER', 'He comes with us. Kovač, patch him up.'], ['ROURKE', 'Then we\'re slow. Then we\'re targets.']]); guard(tk);
+      pr.tH = 1.5; pr.surrender = false;
+      task(() => { if (!pr.alive) return true; const back = 1.6; pr.tgt.set(pl.pos.x + Math.sin(pl.yaw) * back, pl.pos.y, pl.pos.z + Math.cos(pl.yaw) * back); pr.tYaw = pl.yaw; return !G.running; });
+    }
+    S.letterbox(false); G.cinematic = false; G.freezeAI = false; G.camHook = null;
+    // the way out
+    S.objective('Get to the APC at the north gate');
+    const amb = wave([[-21, 92], [-21, 104], [-16, 113], [-9, 113], [-20, 86]], [-6, 100]);
+    S.say([{ who: 'KOVAČ', text: 'Contact! West side! They followed us in!' }]);
+    if (d.value === 'carried') {
+      await wait(4); guard(tk);
+      await moveAlong(mirko, [[-1, 100], [0, 108]], 4.5); guard(tk);
+      A.shot('sniper', false, 0, 140); killScripted(mirko, { x: 0, z: 120 }); mirko.scriptedKill = true;
+      await say([['KOVAČ', 'MIRKO! No. No no no no—'], ['ROURKE', 'Keep moving! We were too slow! Keep MOVING!']]); guard(tk);
+      flags.mirkoDead = true; S.guilt(25); S.psyche.civilianCasualties++; T.remember('He was eleven.');
+    } else {
+      moveAlong(mirko, [[-1, 100], [1.6, 113.5]], 4);
+    }
+    await until(() => inZone(-3, 112, 3, 118)); guard(tk);
+    G.cinematic = true; G.freezeAI = true; S.letterbox(true);
+    const out = [];
+    if (!flags.mirkoDead) out.push(flags.gaveWater ? ['MIRKO', 'For luck, water man. The bottle. You keep it.'] : ['MIRKO', 'Three rations. For my sister. You promised three.'], ['KOVAČ', 'Go home, Mirko. Run. Don\'t stop.']);
+    if (d.value === 'carried') out.push(['WOUNDED MAN', 'The boy. I am sorry. For the boy. I am so sorry.']);
+    await say(out); guard(tk);
+    const end = { executed: ['small', 'The detainee was recorded as killed in action. His daughter was six.'], rourke: ['small', 'Corporal Rourke filed no report. Nobody asked him to.'],
+      released: ['small', 'The man from the shop was not seen again. Not yet.'], carried: ['small', 'The detainee was handed to the Red Cross at 14:05. He lived.'] }[d.value];
+    const lines = [['small', 'The data module placed Sorel in the hospital district.'], end];
+    if (flags.mirkoDead) lines.push(['small', 'Mirko Petrak, 11, was buried by his sister the next morning.']);
+    await chapterDone(tk, 2, lines);
+  };
+
+  // =====================================================================
+  // CHAPTER V — KASERNA (a village school, at night)
+  // =====================================================================
+  const chK = {};
+  function kaserna() {}
+  kaserna.build = function () {
+    newLevel({ bg: 0x0a0d12, fog: [12, 75], sky: 0x45557a, ground: 0x10140f, hemi: 0.45, moon: 0.55, moonColor: 0x9fb0d8, rain: 0.2, center: [0, 30], groundColor: 0x55654a });
+    const house = (x, z, w, d, h) => { box(x - w / 2, 0, z - d / 2, x + w / 2, h, z + d / 2, 'plaster', { tex: 3 }); box(x - w / 2 - 0.3, h, z - d / 2 - 0.3, x + w / 2 + 0.3, h + 0.4, z + d / 2 + 0.3, 'roof', { noAO: true }); };
+    for (const [x, z, w, d, h] of [[-18, 10, 6, 6, 4], [16, 8, 7, 6, 4], [-20, 32, 6, 8, 4.5], [20, 30, 6, 6, 4], [-16, 56, 7, 6, 4], [16, 56, 6, 7, 4], [-6, 64, 6, 5, 4]]) house(x, z, w, d, h);
+    box(-27, 0, 18, -26, 1, 48, 'concrete'); box(26, 0, 14, 27, 1, 44, 'concrete'); box(-12, 0, 18, -6, 1, 19, 'concrete'); box(6, 0, 20, 12, 1, 21, 'concrete');
+    box(-3, 0, 12, -1.5, 1.4, 16, 'burnt'); kit().barrel(9, 14); kit().crate(-9, 24); kit().crate(10, 60);
+    // the school: one big gymnasium, door on the south side
+    const S0 = 30, S1 = 50;
+    box(-10, 0, S0, -1.2, 6, S0 + 0.3, 'brick'); box(1.2, 0, S0, 10, 6, S0 + 0.3, 'brick'); box(-1.2, 2.6, S0, 1.2, 6, S0 + 0.3, 'brick');
+    box(-10, 0, S1 - 0.3, 10, 6, S1, 'brick'); box(-10, 0, S0, -9.7, 6, S1, 'brick'); box(9.7, 0, S0, 10, 6, S1, 'brick');
+    box(-10.2, 6, S0 - 0.2, 10.2, 6.3, S1 + 0.2, 'roof', { noAO: true });
+    kit().visBox(-9.7, 0, S0 + 0.3, 9.7, 0.02, S1 - 0.3, 'floor', { noAO: true });
+    box(-6, 0, S1 - 3, 6, 1, S1 - 0.3, 'plywood'); // stage
+    for (const [x, z] of [[-8, 34], [8, 34], [-8, 46], [8, 46]]) kit().visBox(x - 0.4, 5.6, z - 0.1, x + 0.4, 5.7, z + 0.1, 'dark', { noAO: true });
+    boundary(-30, -6, 30, 72);
+    finishLevel({ x0: -30, z0: -6, x1: 30, z1: 72 });
+    // candles at the door
+    const candles = new THREE.PointLight(0xffa040, 3, 9, 2); candles.position.set(0, 0.6, 28.4); level.scene.add(candles);
+    const cMat = new THREE.MeshBasicMaterial({ color: 0xffe0a0 });
+    for (let i = 0; i < 9; i++) { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.12 + Math.random() * 0.1, 6), cMat); c.position.set(-1.4 + i * 0.35, 0.08, 28.6 + Math.random() * 0.5); level.scene.add(c); }
+    level.extra = () => { candles.intensity = 2.6 + Math.sin(G.now * 11) * 0.3 + Math.random() * 0.3; };
+    // the evidence
+    const wall = canvasTex(512, 280, (g, w, h) => {
+      g.fillStyle = 'rgba(30,30,30,.0)'; g.fillRect(0, 0, w, h); g.strokeStyle = 'rgba(235,235,225,.85)'; g.fillStyle = 'rgba(235,235,225,.85)'; g.lineWidth = 2;
+      g.font = '18px Georgia'; const names = ['Ana', 'Petar', 'Ivo', 'Milica', 'Dragan', 'Sanja', 'Luka', 'Vesna', 'Marko', 'Jelena', 'Stefan', 'Mira', 'Goran', 'Nina', 'Tomas', 'Lena', 'Pavel', 'Zora'];
+      for (let i = 0; i < 70; i++) g.fillText(names[i % names.length], 10 + (i % 7) * 72, 26 + Math.floor(i / 7) * 24);
+      g.font = 'bold 40px Georgia'; g.fillText('206', 420, 262);
+    });
+    plane(wall, 4.4, 2.4, -9.66, 2.2, 40, PI / 2);
+    const brass = new THREE.MeshStandardMaterial({ color: 0xc8a050, metalness: 0.8, roughness: 0.3 });
+    for (let i = 0; i < 26; i++) { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.045, 6), brass); c.rotation.z = PI / 2; c.rotation.y = Math.random() * 6; c.position.set(3 + (Math.random() - 0.5) * 1.6, 0.03, 37 + (Math.random() - 0.5) * 1.6); level.scene.add(c); }
+    const drawing = canvasTex(256, 200, (g, w, h) => {
+      g.fillStyle = '#f2ead8'; g.fillRect(0, 0, w, h); g.lineWidth = 4;
+      g.strokeStyle = '#e8b020'; g.beginPath(); g.arc(212, 36, 20, 0, 6.3); g.stroke();
+      g.strokeStyle = '#4a7a30'; g.beginPath(); g.moveTo(0, 170); g.lineTo(w, 165); g.stroke();
+      for (const x of [40, 90, 140]) { g.strokeStyle = '#333'; g.beginPath(); g.arc(x, 90, 10, 0, 6.3); g.moveTo(x, 100); g.lineTo(x, 140); g.moveTo(x, 140); g.lineTo(x - 10, 165); g.moveTo(x, 140); g.lineTo(x + 10, 165); g.moveTo(x - 14, 115); g.lineTo(x + 14, 115); g.stroke(); g.fillStyle = '#4a6a2a'; g.fillRect(x - 12, 74, 24, 9); }
+      g.strokeStyle = '#c03020'; g.beginPath(); g.arc(196, 120, 8, 0, 6.3); g.moveTo(196, 128); g.lineTo(196, 160); g.stroke();
+    });
+    plane(drawing, 0.6, 0.47, 6, 1.4, 49.66, PI);
+    setCP(0, 0, 0, PI);
+  };
+  kaserna.setup = function () {
+    if (!flags.rourkeDead) squaddie('Rourke', -1.5, 0, -1, PI, -1.5, 1.2);
+    if (!flags.davisDead) squaddie('Davis', 1.5, 0, -1.5, PI, 1.5, 1.4);
+    squaddie('Kovač', 0, 0, -3, PI, 0, 2.4);
+    chK.militia = [insurgent(-14, 0, 20, PI), insurgent(12, 0, 22, PI), insurgent(-4, 0, 58, PI), insurgent(8, 0, 62, PI), insurgent(-22, 0, 44, PI / 2)];
+    level.light = true;
+    A.startAmbience({ rain: 0.2, drone: true, root: 61.7 });
+  };
+  kaserna.script = async function (tk) {
+    const pl = p(), ps = S.psyche;
+    S.letterbox(true); G.cinematic = true;
+    await S.card([['small', 'OPERATION: ASHES OF VERDAN'], ['big', 'V. KASERNA'], ['small', 'Kaserna village, six kilometres from the dam · 23:40 · Day 33']], 2.2); guard(tk);
+    await say([
+      ['OVERLORD', 'Two-One, proceed to the dam by the river road. Do not enter Kaserna. I repeat, bypass the village.', true],
+      ['KOVAČ', 'The river road is mined, Colonel. The only way through is the village.', true],
+      ['OVERLORD', '...Then go through it. Do not stop.', true],
+      flags.rourkeDead ? ['KOVAČ', 'Rourke would have asked why. Rourke always asked why.'] : ['ROURKE', 'He said that twice. Do not stop.'],
+    ]); guard(tk);
+    S.letterbox(false); G.cinematic = false;
+    S.objective('Cross Kaserna');
+    await until(() => pl.pos.z > 14); guard(tk);
+    await say([['KOVAČ', 'Militia. Local men. Careful.']]); guard(tk);
+    S.objective('Clear the village');
+    await orTime(until(() => allDead(chK.militia)), 130); guard(tk);
+    S.objective('Head north through the village');
+    await until(() => inZone(-12, 22, 12, 30)); guard(tk);
+    setCP(0, 0, 26, PI);
+    await say([['KOVAČ', 'Candles. Somebody keeps lighting candles here.'], ['KOVAČ', 'Sean. It\'s a school.']]); guard(tk);
+    S.objective('Search the school (3 things)');
+    const lines = {
+      wall: [['MILLER', 'Names. In chalk. Hundreds of names.'], ['KOVAČ', 'Two hundred and six. Somebody counted. Somebody wanted them counted.']],
+      casings: [['KOVAČ', 'These are ours, Sean. Our lot numbers. Our rounds.']],
+      drawing: [['MILLER', 'A kid drew this. Soldiers with green helmets.'], ['KOVAČ', 'Our helmets. And on the back... the eighth of March.']],
+    };
+    const items = [['wall', examine(-9.2, 0.8, 40, 'Examine the wall')], ['casings', examine(3, 0.1, 37, 'Examine the shell casings')], ['drawing', examine(6, 0.8, 49.2, 'Pick up the drawing')]];
+    let found = 0;
+    await Promise.all(items.map(([k, it]) => it.p.then(async () => {
+      if (tk !== run) return;
+      await say(lines[k]); found++;
+      S.objective(`Search the school (${3 - found} left)`);
+    }))); guard(tk);
+    S.objective('');
+    G.cinematic = true; S.letterbox(true);
+    await say([
+      ['KOVAČ', 'The ninth of March. Hale\'s battalion swept this valley on the ninth. This is what Sorel found. This is why Hale wants him dead.'],
+      flags.rourkeDead ? ['MILLER', '...'] : ['ROURKE', 'Kovač. Stop. Whatever you\'re about to say, stop.'],
+      ['OVERLORD', 'Two-One, OVERLORD Actual. Your position hasn\'t changed in twenty minutes. Why are you in that village?', true],
+      ['KOVAČ', 'I know a reporter at the Courier. Halden. I can send all of it. Right now. The names, the photos, everything.'],
+      ['KOVAČ', 'Your call, Sean. It has to be your call.'],
+    ]); guard(tk);
+    const d = await S.decide({
+      prompt: 'Kovač has the radio. Hale is listening.', time: 6, timeoutValue: 'silent',
+      options: [{ key: 'F', label: 'SEND IT', value: 'send' }, { key: 'E', label: 'BURN IT — FOLLOW ORDERS', value: 'burn' }],
+    }); guard(tk);
+    ps.choices.ch4 = d.value;
+    if (d.value === 'send') {
+      await say([['KOVAČ', 'Sending. Sending... it\'s out. It\'s out.'],
+        ['OVERLORD', 'Two-One, your transmission has been flagged. A security team is coming to you. Stay where you are.', true],
+        flags.rourkeDead ? ['KOVAČ', 'A security team. At midnight. In a village they told us to bypass.'] : ['ROURKE', 'A security team. At midnight. In a village they told us to bypass.']]); guard(tk);
+      flags.leaked = true; S.trust(15); T.remember('Two hundred and six names.');
+      S.letterbox(false); G.cinematic = false; G.camHook = null;
+      await wait(3); guard(tk);
+      const team = wave([[-6, -4], [0, -5], [6, -4], [-14, 4], [14, 4]], [0, 26], 'hale');
+      await say([['KOVAČ', 'Those are our uniforms. Sean. Those are ours.']]); guard(tk);
+      S.objective('Survive');
+      await orTime(until(() => allDead(team)), 140); guard(tk);
+      S.guilt(12);
+    } else {
+      if (d.value === 'burn') await say([['KOVAČ', '...Yes, Sergeant.'], ['KOVAČ', 'I\'ll put the names back on the wall where I found them. They won\'t mind. They\'re used to it.']]);
+      else await say([['KOVAČ', 'You\'re not going to say anything. Okay. Okay.'], ['KOVAČ', 'Then I\'ll put it back. And we\'ll both know.']]);
+      guard(tk);
+      flags.burned = true; S.trust(d.value === 'burn' ? -20 : -12); S.guilt(d.value === 'burn' ? 20 : 15); T.remember('Somebody wanted them counted.');
+      S.letterbox(false); G.cinematic = false; G.camHook = null;
+      await wait(3); guard(tk);
+      const back = wave([[-18, 66], [-8, 70], [6, 70], [18, 66]], [0, 40]);
+      await say([['KOVAČ', 'More militia. From the north. They saw our lights.']]); guard(tk);
+      S.objective('Fight your way out');
+      await orTime(until(() => allDead(back)), 120); guard(tk);
+    }
+    S.objective('Head north toward the dam');
+    await until(() => pl.pos.z > 66); guard(tk);
+    const out = flags.leaked
+      ? [['small', 'The Kaserna photographs reached the Courier at 00:31.'], ['small', 'The security team was listed as lost to enemy action.'], ['small', 'Colonel Hale\'s reply was a single word: Proceed.']]
+      : [['small', 'The drawing went back on the wall. The casings went into the river.'], ['small', 'The names were painted over the following week.'], ['small', 'Nobody painted over the candles.']];
+    await chapterDone(tk, 4, out);
+  };
+
   // ---------- endings ----------
   async function endingSoldier(tk, head) {
     A.shot('ar', true); FX.playerFlash(G.camera.position.x, G.camera.position.y, G.camera.position.z);
@@ -885,8 +1372,12 @@
       ['small', 'Staff Sergeant Sean Miller was awarded the Silver Star for actions in Verdan.']];
     lines.push(flags.davisDead ? ['small', 'He gave the folded flag to Thomas Davis\'s mother himself. She asked if her son had been brave. He said yes.'] : ['small', 'Thomas Davis came home. They have not spoken since.']);
     if (flags.rourkeDead) lines.push(['small', 'Some mornings he still sets out two cups of coffee, and does not know why.']);
+    if (flags.mirkoDead) lines.push(['small', 'Every spring he sends three ration packs to a girl in Verdan. She has never written back.']);
+    else if (flags.gaveWater) lines.push(['small', 'In Verdan, a boy named Mirko still keeps an empty water bottle on his windowsill. Miller will never know this.']);
     if (ps.civilianCasualties > 0) lines.push(['small', 'He does not go to crowded places. He does not hold his nephew. He does not talk about Verdan.']);
-    lines.push(['small', 'His wife left in the second year. She said she was married to a man who never came back.'], ['small', 'The Kaserna file was never found.']);
+    lines.push(['small', 'His wife left in the second year. She said she was married to a man who never came back.']);
+    lines.push(flags.leaked ? ['small', 'The Kaserna photographs ran in the Courier three weeks later. Colonel Hale was relieved of command. Miller testified for six hours. It did not help him sleep.']
+      : ['small', 'The Kaserna file was never found. He knows exactly where it went.']);
     await epilogue(tk, lines, 'soldier');
   }
   async function endingMartyr(tk, head) {
@@ -903,7 +1394,8 @@
       ['small', 'The water reached the Narrows nine minutes later. The official count was four hundred and twelve.'],
       ['small', 'Staff Sergeant Sean Miller\'s body was recovered from the drainage tunnels eleven days later.'],
       ['small', 'Command reported that the dam was destroyed by insurgent sabotage. That part was true.'],
-      ['small', 'The Kaserna file was never found.']];
+      flags.leaked ? ['small', 'Kovač\'s photographs reached the world anyway. Colonel Hale was court-martialed the following spring. Four hundred and twelve people did not live to see it.']
+        : ['small', 'The Kaserna file was never found.']];
     await epilogue(tk, lines, 'martyr');
   }
   async function endingMonster(tk, head) {
@@ -920,6 +1412,10 @@
     if (flags.davisDead) log.push('There was a boy who wanted his mother. I promised her. I promised her.');
     if (flags.strike) log.push('There were children under a tower. I said two words. Two words.');
     if (flags.rourkeDead) log.push('Rourke told me to get up. I got up. I don\'t know what for.');
+    if (flags.prisoner === 'executed' || flags.prisoner === 'rourke') log.push('There was a man with his hands up who had a daughter called Lena. She is six. She will always be six to me.');
+    if (flags.mirkoDead) log.push('There was a boy who showed us the way. He was eleven. We were too slow.');
+    if (flags.burned) log.push('I stood in a gym full of names, and I put them back on the wall, and I walked out.');
+    if (flags.leaked) log.push('We told the world about Kaserna. The world said thank you and changed the channel.');
     log.push('They gave us rules so we would not have to be people in here. It didn\'t work. It never works.',
       'I keep asking what any of it was supposed to mean. What it means to be human, if this is what humans do.',
       'I\'m going to sit here a while. I\'m so tired. End log.');
@@ -941,6 +1437,7 @@
     $('ceStats').innerHTML = [
       ['GUILT', ps.guiltLevel], ['CIVILIANS KILLED', ps.civilianCasualties], ['SQUAD TRUST', ps.squadTrust], ['BROKEN VOWS', ps.brokenVows],
       ['DAVIS', flags.davisDead ? 'K.I.A.' : 'CAME HOME'], ['ROURKE', flags.rourkeDead ? 'K.I.A.' : 'CAME HOME'],
+      ['MIRKO', flags.mirkoDead ? 'KILLED' : 'ALIVE'], ['KASERNA', flags.leaked ? 'EXPOSED' : 'BURIED'], ['THE MAN IN THE SHOP', { executed: 'EXECUTED', rourke: 'EXECUTED', released: 'SPARED', carried: 'SAVED' }[flags.prisoner] || '—'],
     ].map(([k, v]) => `<div><b>${v}</b><span>${k}</span></div>`).join('');
     $('campEnd').classList.remove('hidden');
     G.running = false;

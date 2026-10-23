@@ -356,7 +356,8 @@
       const sw = Math.sin(this.walk) * Math.min(1, hs / 3) * 0.6;
       this.legs[0].rotation.x = sw; this.legs[1].rotation.x = -sw;
       this.upper.rotation.x = -this.aimPitch * 0.7;
-      m.scale.y += ((this.crouched ? 0.7 : 1) - m.scale.y) * Math.min(1, dt * 10);
+      const bs = this.baseScale || 1; m.scale.x = m.scale.z = bs; // children are drawn smaller
+      m.scale.y += ((this.crouched ? 0.7 : 1) * bs - m.scale.y) * Math.min(1, dt * 10);
       // footsteps you can hear
       if (hs > 1.5 && this.onGround) {
         this.stepT -= dt * hs;
@@ -431,7 +432,7 @@
       this.aimPitch += (this.tPitch - this.aimPitch) * Math.min(1, dt * 14);
       this.yaw = this.aimYaw;
       this.height += (this.tH - this.height) * Math.min(1, dt * 12);
-      this.crouched = this.tH < 1.5;
+      this.crouched = this.tH < 1.5 * (this.baseScale || 1);
       this.animate(dt, now);
     }
     updateDeath(dt) {
