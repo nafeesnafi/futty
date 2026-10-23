@@ -1081,7 +1081,7 @@
   const chM = {};
   function market() {}
   market.build = function () {
-    newLevel({ bg: 0x8a9096, fog: [25, 125], sky: 0xc0c8d0, ground: 0x5a564e, hemi: 1.6, moon: 1.1, moonColor: 0xdde4ea, rain: 0.15, shadows: +G.settings.gfx > 0, center: [0, 56] });
+    newLevel({ bg: 0x8a9096, fog: [25, 125], sky: 0xc0c8d0, ground: 0x5a564e, hemi: 1.6, moon: 1.1, moonColor: 0xdde4ea, rain: 0.15, shadows: +G.settings.gfx > 0, center: [0, 56], roofs: [[6, 86, 14, 100]] });
     // west: outer block, back alley (x -14..-9.5) and the street facade with two doors into it
     box(-24, 0, -8, -14, 8, 84, 'concrete', { tex: 4 });
     box(-14, 0, -8, -9.5, 7, 8, 'brick'); box(-14, 0, 82, -9.5, 7, 84, 'brick');
@@ -1232,7 +1232,7 @@
   const chK = {};
   function kaserna() {}
   kaserna.build = function () {
-    newLevel({ bg: 0x0a0d12, fog: [12, 75], sky: 0x45557a, ground: 0x10140f, hemi: 0.45, moon: 0.55, moonColor: 0x9fb0d8, rain: 0.2, center: [0, 30], groundColor: 0x55654a });
+    newLevel({ bg: 0x0a0d12, fog: [12, 75], sky: 0x45557a, ground: 0x10140f, hemi: 0.45, moon: 0.55, moonColor: 0x9fb0d8, rain: 0.2, center: [0, 30], groundColor: 0x55654a, roofs: [[-10, 30, 10, 50]] });
     const house = (x, z, w, d, h) => { box(x - w / 2, 0, z - d / 2, x + w / 2, h, z + d / 2, 'plaster', { tex: 3 }); box(x - w / 2 - 0.3, h, z - d / 2 - 0.3, x + w / 2 + 0.3, h + 0.4, z + d / 2 + 0.3, 'roof', { noAO: true }); };
     for (const [x, z, w, d, h] of [[-18, 10, 6, 6, 4], [16, 8, 7, 6, 4], [-20, 32, 6, 8, 4.5], [20, 30, 6, 6, 4], [-16, 56, 7, 6, 4], [16, 56, 6, 7, 4], [-6, 64, 6, 5, 4]]) house(x, z, w, d, h);
     box(-27, 0, 18, -26, 1, 48, 'concrete'); box(26, 0, 14, 27, 1, 44, 'concrete'); box(-12, 0, 18, -6, 1, 19, 'concrete'); box(6, 0, 20, 12, 1, 21, 'concrete');
