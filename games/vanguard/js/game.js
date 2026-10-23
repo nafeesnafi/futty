@@ -34,6 +34,9 @@
       renderer.shadowMap.enabled = sh;
       if (G.scene) G.scene.traverse(o => { if (o.material) o.material.needsUpdate = true; });
     }
+    // Medium/High: custom post pipeline (SSAO, bloom, lens). Low: straight to the canvas.
+    VG.Post.init(renderer, gfx);
+    G.renderer = renderer;
     if (G.sun) {
       const size = gfx === 2 ? 4096 : 2048;
       if (G.sun.shadow.mapSize.x !== size) { G.sun.shadow.mapSize.set(size, size); if (G.sun.shadow.map) { G.sun.shadow.map.dispose(); G.sun.shadow.map = null; } }
@@ -43,31 +46,42 @@
   // camera + viewmodel scene are shared by every mode; levels swap G.scene
   function buildCore() {
     if (G.camera) return;
-    G.camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 900);
+    G.camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 900); // 10 cm near plane: precise depth for SSAO
     // viewmodel scene, rendered on top after clearing depth so guns never clip into walls
     G.vmScene = new THREE.Scene();
-    G.vmCamera = new THREE.PerspectiveCamera(54, innerWidth / innerHeight, 0.01, 10);
+    G.vmCamera = new THREE.PerspectiveCamera(54, innerWidth / innerHeight, 0.01, 100);
     G.vmScene.add(new THREE.HemisphereLight(0xe0ecff, 0x6a5c4c, 2.2));
     const key = new THREE.DirectionalLight(0xfff0d6, 2.2); key.position.set(0.6, 1, 0.4); G.vmScene.add(key);
     G.vmRoot = new THREE.Group(); G.vmScene.add(G.vmRoot);
   }
   G.buildCore = buildCore;
+  // procedural skies for image-based lighting (metal gets real reflections and Fresnel)
+  const ENVS = {
+    day: { zenith: 0x5d86b4, horizon: 0xd8cdb4, ground: 0x5a5046, sun: [38, 75, 22], sunColor: 0xfff0d6, sunPower: 40 },
+    dusk: { zenith: 0x4a5670, horizon: 0xd09060, ground: 0x3a3028, sun: [-30, 12, -25], sunColor: 0xffb070, sunPower: 30 },
+    overcast: { zenith: 0x9aa4ae, horizon: 0xb4b8b8, ground: 0x4a4640 },
+    rain: { zenith: 0x4a525c, horizon: 0x6a7078, ground: 0x2a2826 },
+    night: { zenith: 0x0a1020, horizon: 0x1a2232, ground: 0x0a0a0a, sun: [-30, 60, -25], sunColor: 0xa8bcd8, sunPower: 3 },
+    dark: { zenith: 0x030405, horizon: 0x060807, ground: 0x020202 },
+  };
+  G.envFor = (k) => { if (!renderer) setupRenderer(); return VG.Post.makeEnv(renderer, ENVS[k] || ENVS.day, k); };
   G.setupRenderer = () => setupRenderer();
   G.store = store;
   function buildWorld() {
     buildCore();
     const scene = G.scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0xb8b6a8, 60, 260);
+    scene.fog = new THREE.FogExp2(0xc4b9a2, 0.0056); // warm, dusty industrial haze
     scene.background = new THREE.Color(0xb8b6a8);
     const sky = new THREE.Mesh(new THREE.SphereGeometry(400, 32, 16), new THREE.MeshBasicMaterial({ map: VG.Tex.sky(), side: THREE.BackSide, fog: false, depthWrite: false }));
     scene.add(sky);
-    scene.add(new THREE.HemisphereLight(0xd6e6ff, 0x7a6a55, 1.6));
-    scene.add(new THREE.AmbientLight(0xfff6e8, 0.55));
+    // sky light now mostly comes from the environment map (IBL); the hemisphere only fills
+    scene.add(new THREE.HemisphereLight(0xd6e6ff, 0x7a6a55, 0.75));
+    scene.environment = G.envFor('day');
     const sun = G.sun = new THREE.DirectionalLight(0xfff0d6, 2.8);
     sun.position.set(38, 75, 22); sun.target.position.set(0, 0, 0);
     sun.castShadow = true;
     const sc = sun.shadow.camera; sc.left = -64; sc.right = 64; sc.top = 64; sc.bottom = -64; sc.near = 10; sc.far = 190;
-    sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.04;
+    sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0003; sun.shadow.normalBias = 0.03; sun.shadow.radius = 3;
     scene.add(sun); scene.add(sun.target);
     scene.add(G.camera);
 
@@ -661,11 +675,17 @@
       if (G.timeLeft <= 0 && !G.ended && !(G.net && !G.net.isHost())) endMatch();
       step(dt, real);
     }
-    renderer.autoClear = true;
-    renderer.render(G.scene, G.camera);
-    if (G.player.alive && G.vmRoot.visible) {
-      renderer.autoClear = false; renderer.clearDepth();
-      renderer.render(G.vmScene, G.vmCamera);
+    const showVM = G.player.alive && G.vmRoot.visible;
+    G.vmScene.environment = G.scene.environment; // guns reflect whatever sky the level has
+    if (VG.Post.active) {
+      VG.Post.render(G.scene, G.camera, G.vmScene, G.vmCamera, showVM, { ads: G.player.alive && !G.player.scopedNow ? G.player.ads : 0, ao: +G.settings.gfx >= 1 });
+    } else {
+      renderer.autoClear = true;
+      renderer.render(G.scene, G.camera);
+      if (showVM) {
+        renderer.autoClear = false; renderer.clearDepth();
+        renderer.render(G.vmScene, G.vmCamera);
+      }
     }
     input.pressed = {}; input.wheel = 0;
   }
@@ -733,6 +753,7 @@
   addEventListener('resize', () => {
     if (!renderer) return;
     renderer.setSize(innerWidth, innerHeight);
+    VG.Post.resize();
     G.camera.aspect = G.vmCamera.aspect = innerWidth / innerHeight;
     G.camera.updateProjectionMatrix(); G.vmCamera.updateProjectionMatrix();
   });

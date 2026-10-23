@@ -64,6 +64,7 @@
     const scene = G.scene = new THREE.Scene();
     scene.background = new THREE.Color(cfg.bg);
     scene.fog = new THREE.Fog(cfg.bg, cfg.fog[0], cfg.fog[1]);
+    scene.environment = G.envFor(cfg.env || 'night');
     const hemi = new THREE.HemisphereLight(cfg.sky, cfg.ground, cfg.hemi);
     scene.add(hemi);
     const moon = new THREE.DirectionalLight(cfg.moonColor || 0xa8bcd8, cfg.moon);
@@ -85,8 +86,9 @@
     flashlight.position.set(0.15, -0.12, 0); flashlight.target.position.set(0.05, -0.2, -6);
     G.camera.add(flashlight); G.camera.add(flashlight.target);
     if (cfg.groundKey !== false) {
-      const g = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), new THREE.MeshStandardMaterial({ map: VG.Tex.asphalt(), color: cfg.groundColor || 0x777777, roughness: 0.9 }));
-      g.material.map = g.material.map.clone(); g.material.map.needsUpdate = true; g.material.map.repeat.set(50, 50);
+      const r50 = (t) => { const c2 = t.clone(); c2.needsUpdate = true; c2.repeat.set(50, 50); return c2; };
+      const g = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), new THREE.MeshStandardMaterial({ map: r50(VG.Tex.asphalt()), color: cfg.groundColor || 0x777777,
+        normalMap: r50(VG.Tex.normal('asphalt', 2.2)), roughnessMap: r50(VG.Tex.rough('asphalt', cfg.rain ? 0.55 : 0.9, 0.2)), roughness: 1 }));
       g.rotation.x = -PI / 2; g.receiveShadow = true; scene.add(g);
     }
     level = { scene, hemi, hemiBase: cfg.hemi, skyCol: hemi.color.clone(), groundCol: hemi.groundColor.clone(), fogCol: scene.fog.color.clone(), nvOn: false, moon, moonBase: cfg.moon, lightningT: cfg.lightning ? 6 : -1, rain: null, roofs: cfg.roofs || [], light: cfg.flashOn !== false };
@@ -134,7 +136,7 @@
       m.band.color.setHex(0x222222); m.band.emissive.setHex(0); b.helmet.visible = false;
     } else if (kind === 'civ') {
       m.pants.color.setHex([0x3d3a52, 0x5a4a3a, 0x40362e, 0x2e3a4a][idx % 4]); m.vest.color.setHex([0x7a3a3a, 0x8a7a5a, 0x5a6a7a, 0x6b4f6b][idx % 4]);
-      m.band.color.copy(m.vest.color); m.band.emissive.setHex(0); b.helmet.visible = false;
+      m.band.color.copy(m.vest.color); m.band.emissive.setHex(0); b.helmet.visible = false; for (const o of b.kit || []) o.visible = false;
     } else if (kind === 'squad') { m.band.color.setHex(0x55663a); m.band.emissive.setHex(0); }
   }
   function nameTag(b, text) {
@@ -603,7 +605,7 @@
   const ch2 = {};
   function chapter2() {}
   chapter2.build = function () {
-    newLevel({ bg: 0x3a3f46, fog: [22, 110], sky: 0x8a96a4, ground: 0x4a443c, hemi: 1.5, moon: 1.3, moonColor: 0xc8ccd4, lightning: true, rain: 0.9, shadows: +G.settings.gfx > 0, center: [0, 32] });
+    newLevel({ env: 'rain', bg: 0x3a3f46, fog: [22, 110], sky: 0x8a96a4, ground: 0x4a443c, hemi: 1.1, moon: 1.3, moonColor: 0xc8ccd4, lightning: true, rain: 0.9, shadows: +G.settings.gfx > 0, center: [0, 32] });
     const R = 'rubble';
     // ruined facades around the square
     box(-32, 0, -8, -30, 9, 72, 'burnt', { tex: 4 }); box(-30, 0, 70, 32, 8, 72, 'concrete', { tex: 4 });
@@ -811,7 +813,7 @@
   const ch3 = {};
   function chapter3() {}
   chapter3.build = function () {
-    newLevel({ bg: 0x020303, fog: [5, 38], sky: 0x2e4038, ground: 0x0e0e0e, hemi: 0.3, moon: 0, center: [0, -60], groundKey: false });
+    newLevel({ env: 'dark', bg: 0x020303, fog: [5, 38], sky: 0x2e4038, ground: 0x0e0e0e, hemi: 0.3, moon: 0, center: [0, -60], groundKey: false });
     const Wk = 'sewer';
     // floor + main tunnel (z 0 .. -60), 4 m wide
     box(-16, -0.5, -128, 16, 0, 4, 'rubble', { noAO: true, tex: 3 });
@@ -973,7 +975,7 @@
   const ch0 = {};
   function prologue() {}
   prologue.build = function () {
-    newLevel({ bg: 0x4a4038, fog: [30, 150], sky: 0xb4a490, ground: 0x4a4036, hemi: 1.3, moon: 1.4, moonColor: 0xffb070, rain: 0.35, shadows: +G.settings.gfx > 0, center: [0, 28] });
+    newLevel({ env: 'dusk', bg: 0x4a4038, fog: [30, 150], sky: 0xb4a490, ground: 0x4a4036, hemi: 0.85, moon: 1.4, moonColor: 0xffb070, rain: 0.35, shadows: +G.settings.gfx > 0, center: [0, 28] });
     // HESCO perimeter with a gate on the north side
     box(-21, 0, -9, -19.6, 2.4, 34.4, 'cloth', { tex: 2 }); box(19.6, 0, -9, 21, 2.4, 34.4, 'cloth', { tex: 2 }); box(-21, 0, -9, 21, 2.4, -7.6, 'cloth', { tex: 2 });
     box(-21, 0, 33, -3, 2.4, 34.4, 'cloth', { tex: 2 }); box(3, 0, 33, 21, 2.4, 34.4, 'cloth', { tex: 2 });
@@ -1081,7 +1083,7 @@
   const chM = {};
   function market() {}
   market.build = function () {
-    newLevel({ bg: 0x8a9096, fog: [25, 125], sky: 0xc0c8d0, ground: 0x5a564e, hemi: 1.6, moon: 1.1, moonColor: 0xdde4ea, rain: 0.15, shadows: +G.settings.gfx > 0, center: [0, 56], roofs: [[6, 86, 14, 100]] });
+    newLevel({ env: 'overcast', bg: 0x8a9096, fog: [25, 125], sky: 0xc0c8d0, ground: 0x5a564e, hemi: 0.9, moon: 1.1, moonColor: 0xdde4ea, rain: 0.15, shadows: +G.settings.gfx > 0, center: [0, 56], roofs: [[6, 86, 14, 100]] });
     // west: outer block, back alley (x -14..-9.5) and the street facade with two doors into it
     box(-24, 0, -8, -14, 8, 84, 'concrete', { tex: 4 });
     box(-14, 0, -8, -9.5, 7, 8, 'brick'); box(-14, 0, 82, -9.5, 7, 84, 'brick');

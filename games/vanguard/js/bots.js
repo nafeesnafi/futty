@@ -16,6 +16,114 @@
   function wrap(a) { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; }
   const rnd = (a, b) => a + Math.random() * (b - a);
 
+  // ---------- soldier model: segmented parts merged per material, built once and shared by every bot ----------
+  const GLASS = new THREE.MeshStandardMaterial({ color: 0x0c0d0e, roughness: 0.08, metalness: 0.6 });
+  const _m4 = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3();
+  const DOWN = new THREE.Vector3(0, -1, 0);
+  function xf(geo, x, y, z, rx, ry, rz, sx, sy, sz) {
+    _e.set(rx || 0, ry || 0, rz || 0); _q.setFromEuler(_e);
+    _s.set(sx || 1, sy || sx || 1, sz || sx || 1);
+    return geo.applyMatrix4(_m4.compose(_p.set(x, y, z), _q, _s));
+  }
+  function merge(list) {
+    let n = 0;
+    const parts = list.map(g => { const ng = g.index ? g.toNonIndexed() : g; n += ng.attributes.position.count; return ng; });
+    const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3);
+    let o = 0;
+    for (const g of parts) { pos.set(g.attributes.position.array, o * 3); nor.set(g.attributes.normal.array, o * 3); o += g.attributes.position.count; }
+    const out = new THREE.BufferGeometry();
+    out.setAttribute('position', new THREE.BufferAttribute(pos, 3)); out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    out.computeBoundingSphere();
+    return out;
+  }
+  const cyl = (r0, r1, h, seg) => new THREE.CylinderGeometry(r0, r1, h, seg || 8);
+  // rounded box (soft edges catch light like padded fabric)
+  function rbox(w, h, d, r) {
+    r = Math.min(r || 0.012, w / 2 - 0.001, h / 2 - 0.001);
+    const sh = new THREE.Shape(), x = -w / 2, y = -h / 2;
+    sh.moveTo(x + r, y); sh.lineTo(x + w - r, y); sh.quadraticCurveTo(x + w, y, x + w, y + r); sh.lineTo(x + w, y + h - r);
+    sh.quadraticCurveTo(x + w, y + h, x + w - r, y + h); sh.lineTo(x + r, y + h); sh.quadraticCurveTo(x, y + h, x, y + h - r);
+    sh.lineTo(x, y + r); sh.quadraticCurveTo(x, y, x + r, y);
+    const gm = new THREE.ExtrudeGeometry(sh, { depth: Math.max(0.001, d - r * 2), bevelEnabled: true, bevelThickness: r, bevelSize: r * 0.6, bevelSegments: 1, curveSegments: 2 });
+    gm.translate(0, 0, -(d - r * 2) / 2);
+    return gm;
+  }
+  // tapered limb segment from a to b
+  function limb(a, b, r0, r1) {
+    const d = _p.copy(b).sub(a), L = d.length();
+    const gm = cyl(r0, r1, L, 8); gm.translate(0, -L / 2, 0);
+    _q.setFromUnitVectors(DOWN, d.normalize());
+    return gm.applyMatrix4(_m4.compose(a, _q, _s.set(1, 1, 1)));
+  }
+  // two-bone IK at build time: elbow position for a shoulder -> hand reach bending toward the pole
+  function elbow(S, H, L1, L2, pole) {
+    const dir = H.clone().sub(S); let d = dir.length(); dir.normalize();
+    d = Math.min(d, L1 + L2 - 0.002);
+    const a = (L1 * L1 - L2 * L2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, L1 * L1 - a * a));
+    const pp = pole.clone().addScaledVector(dir, -pole.dot(dir)).normalize();
+    return S.clone().addScaledVector(dir, a).addScaledVector(pp, h);
+  }
+  let SOLDIER = null;
+  function soldierGeo() {
+    if (SOLDIER) return SOLDIER;
+    const V = (x, y, z) => new THREE.Vector3(x, y, z);
+    const G = {};
+    G.pelvis = merge([xf(cyl(0.165, 0.17, 0.2, 10), 0, 0.97, 0, 0, 0, 0, 1, 1, 0.74)]);
+    G.belt = merge([xf(cyl(0.172, 0.17, 0.05, 10), 0, 1.0, 0, 0, 0, 0, 1, 1, 0.74), xf(rbox(0.08, 0.1, 0.05), 0.15, 0.94, 0.05, 0, 0.3)]);
+    // thigh with a cargo pocket; shin; boot; knee pad
+    const thigh = side => merge([xf(cyl(0.1, 0.075, 0.46), 0, -0.22, 0, 0, 0, 0, 1, 1, 1.08), xf(rbox(0.04, 0.13, 0.11, 0.012), side * 0.09, -0.24, 0)]);
+    G.thighs = [thigh(-1), thigh(1)]; // cargo pocket on the outside of each leg
+    G.shin = merge([xf(cyl(0.074, 0.056, 0.4), 0, -0.2, 0.005)]);
+    G.boot = merge([xf(rbox(0.11, 0.1, 0.25, 0.025), 0, -0.42, -0.045), xf(rbox(0.12, 0.025, 0.27, 0.008), 0, -0.462, -0.045), xf(cyl(0.058, 0.06, 0.08), 0, -0.36, 0)]);
+    G.kneePad = merge([xf(rbox(0.11, 0.12, 0.05, 0.018), 0, -0.02, -0.07, -0.15)]);
+    // torso and neck
+    G.torso = merge([xf(cyl(0.2, 0.155, 0.52, 10), 0, 0.3, 0, 0, 0, 0, 1, 1, 0.62),
+      xf(new THREE.SphereGeometry(0.075, 8, 6), 0.2, 0.52, 0), xf(new THREE.SphereGeometry(0.075, 8, 6), -0.2, 0.52, 0)]);
+    G.neck = merge([xf(cyl(0.05, 0.058, 0.12), 0, 0.62, 0)]);
+    // plate carrier: front/back plates, cummerbund, straps, triple mag pouch
+    const carrier = [xf(rbox(0.34, 0.36, 0.06, 0.02), 0, 0.33, -0.125), xf(rbox(0.34, 0.38, 0.06, 0.02), 0, 0.34, 0.125),
+      xf(cyl(0.21, 0.19, 0.16, 10), 0, 0.22, 0, 0, 0, 0, 1, 1, 0.7),
+      xf(rbox(0.07, 0.03, 0.26, 0.01), 0.11, 0.53, 0), xf(rbox(0.07, 0.03, 0.26, 0.01), -0.11, 0.53, 0)];
+    for (const x of [-0.09, 0, 0.09]) carrier.push(xf(rbox(0.075, 0.12, 0.05, 0.012), x, 0.24, -0.175));
+    G.carrier = merge(carrier);
+    // dark kit on the rig: admin pouch, radio + antenna, hydration carrier
+    G.rig = merge([xf(rbox(0.15, 0.08, 0.03, 0.01), 0, 0.42, -0.165), xf(rbox(0.07, 0.15, 0.05, 0.01), -0.11, 0.42, 0.18),
+      xf(cyl(0.005, 0.004, 0.3, 4), -0.12, 0.62, 0.18, 0, 0, 0.12), xf(rbox(0.24, 0.3, 0.08, 0.025), 0.04, 0.33, 0.2)]);
+    // arms posed on the rifle: right hand on the grip, left hand forward on the handguard
+    const sleeves = [], gloves = [], bands = [], pads = [];
+    const arm = (S, H, pole) => {
+      const E = elbow(S, H, 0.3, 0.29, pole);
+      sleeves.push(limb(S, E, 0.056, 0.047), limb(E, H, 0.046, 0.038));
+      gloves.push(xf(new THREE.SphereGeometry(0.045, 8, 6), H.x, H.y, H.z, 0, 0, 0, 0.85, 0.75, 1.25));
+      const bandAt = S.clone().lerp(E, 0.35);
+      bands.push(limb(bandAt, S.clone().lerp(E, 0.5), 0.06, 0.058));
+      const out = E.clone().sub(S.clone().lerp(H, 0.5)).normalize();
+      pads.push(xf(new THREE.SphereGeometry(0.05, 8, 6), E.x + out.x * 0.025, E.y + out.y * 0.025, E.z + out.z * 0.025, 0, 0, 0, 1, 1, 1));
+    };
+    arm(V(0.2, 0.5, 0), V(0.1, 0.36, -0.27), V(0.7, -0.7, 0.2));
+    arm(V(-0.2, 0.5, 0), V(0.05, 0.41, -0.52), V(-0.8, -0.6, 0));
+    G.torso = merge([G.torso].concat(sleeves));
+    G.gloves = merge(gloves); G.bands = merge(bands);
+    G.rig = merge([G.rig].concat(pads));
+    // head (balaclava and goggles go in the kit, so civilians show a plain face)
+    G.head = merge([xf(new THREE.SphereGeometry(0.105, 12, 10), 0, 0, 0, 0, 0, 0, 0.92, 1.1, 1), xf(rbox(0.03, 0.045, 0.04, 0.01), 0, -0.01, -0.1)]);
+    G.shell = merge([xf(new THREE.SphereGeometry(0.128, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), 0, 0.03, 0.005, -0.08, 0, 0, 1, 0.92, 1.1),
+      xf(cyl(0.13, 0.132, 0.025, 14), 0, 0.03, 0.005, -0.08, 0, 0, 1, 1, 1.1)]);
+    G.headKit = merge([
+      // side rails, NVG shroud + flipped-up tubes, headset cups
+      xf(rbox(0.018, 0.03, 0.15, 0.006), 0.13, 0.045, 0.01), xf(rbox(0.018, 0.03, 0.15, 0.006), -0.13, 0.045, 0.01),
+      xf(rbox(0.05, 0.04, 0.025, 0.008), 0, 0.1, -0.14), xf(rbox(0.06, 0.03, 0.06, 0.008), 0, 0.14, -0.16),
+      xf(cyl(0.018, 0.02, 0.07), 0.024, 0.15, -0.175, 1.1), xf(cyl(0.018, 0.02, 0.07), -0.024, 0.15, -0.175, 1.1),
+      xf(cyl(0.046, 0.046, 0.035, 10), 0.115, -0.01, 0, 0, 0, Math.PI / 2), xf(cyl(0.046, 0.046, 0.035, 10), -0.115, -0.01, 0, 0, 0, Math.PI / 2),
+      xf(cyl(0.008, 0.008, 0.25, 4), 0, 0.1, 0, 0, 0, Math.PI / 2, 1, 1, 1),
+      // balaclava over the jaw and neck, goggle strap
+      xf(new THREE.SphereGeometry(0.11, 12, 8, 0, Math.PI * 2, Math.PI * 0.45, Math.PI * 0.55), 0, 0, 0, 0, 0, 0, 0.95, 1.12, 1.04),
+      xf(cyl(0.062, 0.07, 0.12), 0, -0.13, 0),
+      xf(cyl(0.104, 0.104, 0.02, 12), 0, 0.035, 0.005, 0, 0, 0, 0.98, 1, 1.06)]);
+    G.goggles = merge([xf(rbox(0.17, 0.05, 0.035, 0.015), 0, 0.035, -0.098)]);
+    return (SOLDIER = G);
+  }
+
   class Bot {
     constructor(game, name, team, idx) {
       this.game = game; this.name = name; this.team = team; this.isPlayer = false;
@@ -34,31 +142,30 @@
       const mDark = new THREE.MeshStandardMaterial({ color: 0x1f2020, roughness: 0.8 });
       const teamCol = g.mode === 'tdm' ? (this.team === 0 ? 0x2f8fe0 : 0xd8352a) : 0x9a2a20;
       const mBand = new THREE.MeshStandardMaterial({ color: teamCol, roughness: 0.6, emissive: teamCol, emissiveIntensity: 0.25 });
-      const box = (parent, w, h, d, m, x, y, z) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); o.castShadow = true; parent.add(o); return o; };
+      const G = soldierGeo();
+      const mesh = (parent, geo, m, kit) => { const o = new THREE.Mesh(geo, m); o.castShadow = true; parent.add(o); if (kit) this.kit.push(o); return o; };
       const root = new THREE.Group();
-      // legs (pivot at hip)
-      this.legs = [-0.11, 0.11].map(x => {
+      this.kit = [];
+      mesh(root, G.pelvis, mPants); mesh(root, G.belt, mDark);
+      // legs: hip pivot -> thigh, knee pivot -> shin and boot
+      this.knees = [];
+      this.legs = [-0.1, 0.1].map((x, i) => {
         const piv = new THREE.Group(); piv.position.set(x, 0.92, 0); root.add(piv);
-        box(piv, 0.18, 0.84, 0.2, mPants, 0, -0.42, 0);
-        box(piv, 0.2, 0.12, 0.28, mDark, 0, -0.86, -0.04); // boot
+        mesh(piv, G.thighs[i], mPants);
+        const knee = new THREE.Group(); knee.position.y = -0.45; piv.add(knee); this.knees.push(knee);
+        mesh(knee, G.shin, mPants); mesh(knee, G.boot, mDark); mesh(knee, G.kneePad, mDark, true);
         return piv;
       });
       const upper = new THREE.Group(); upper.position.y = 0.92; root.add(upper); this.upper = upper;
-      box(upper, 0.44, 0.6, 0.26, mPants, 0, 0.3, 0);
-      box(upper, 0.48, 0.44, 0.34, mVest, 0, 0.34, 0);
-      box(upper, 0.16, 0.12, 0.06, mDark, -0.1, 0.26, -0.19); box(upper, 0.16, 0.12, 0.06, mDark, 0.1, 0.26, -0.19); // pouches
-      box(upper, 0.3, 0.32, 0.12, mDark, 0, 0.36, 0.22); // backpack
+      mesh(upper, G.torso, mPants); mesh(upper, G.neck, mSkin); mesh(upper, G.gloves, mDark); mesh(upper, G.bands, mBand);
+      mesh(upper, G.carrier, mVest, true); mesh(upper, G.rig, mDark, true);
       const head = new THREE.Group(); head.position.y = 0.72; upper.add(head);
-      box(head, 0.22, 0.24, 0.24, mSkin, 0, 0, 0);
-      const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.165, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), mVest);
-      helmet.position.y = 0.04; helmet.castShadow = true; head.add(helmet);
+      mesh(head, G.head, mSkin);
+      // helmet kit: FAST shell, NVG, headset, balaclava and goggles (hidden as one for civilians and insurgents)
+      const helmet = new THREE.Group(); head.add(helmet);
+      mesh(helmet, G.shell, mVest); mesh(helmet, G.headKit, mDark);
+      const lens = mesh(helmet, G.goggles, GLASS); lens.castShadow = false;
       this.helmet = helmet; this.mats = { pants: mPants, vest: mVest, skin: mSkin, band: mBand };
-      box(head, 0.2, 0.05, 0.03, mDark, 0, 0.03, -0.125); // goggles strap
-      // arms holding the rifle forward
-      const ra = box(upper, 0.12, 0.12, 0.42, mVest, 0.2, 0.4, -0.18); ra.rotation.x = 0.25;
-      const la = box(upper, 0.12, 0.12, 0.5, mVest, -0.16, 0.42, -0.3); la.rotation.set(0.15, 0.5, 0);
-      box(upper, 0.13, 0.06, 0.13, mBand, 0.2, 0.48, -0.02); // team armband
-      box(upper, 0.13, 0.06, 0.13, mBand, -0.22, 0.48, -0.02);
       this.guns = {};
       for (const id of VG.WEAPON_ORDER) {
         const gm = VG.buildBotGun(id);
@@ -353,8 +460,12 @@
       this.stepUp *= Math.pow(0.001, dt);
       m.rotation.y = this.yaw;
       this.walk += hs * dt * 2.6;
-      const sw = Math.sin(this.walk) * Math.min(1, hs / 3) * 0.6;
+      const amt = Math.min(1, hs / 3), sw = Math.sin(this.walk) * amt * 0.6, cw = Math.cos(this.walk);
       this.legs[0].rotation.x = sw; this.legs[1].rotation.x = -sw;
+      // knees flex while each leg swings forward, and stay soft when standing
+      this.knees[0].rotation.x = -0.08 - Math.max(0, cw) * amt * 1.05;
+      this.knees[1].rotation.x = -0.08 - Math.max(0, -cw) * amt * 1.05;
+      this.upper.position.y = 0.92 + Math.abs(cw) * amt * 0.025;
       this.upper.rotation.x = -this.aimPitch * 0.7;
       const bs = this.baseScale || 1; m.scale.x = m.scale.z = bs; // children are drawn smaller
       m.scale.y += ((this.crouched ? 0.7 : 1) * bs - m.scale.y) * Math.min(1, dt * 10);

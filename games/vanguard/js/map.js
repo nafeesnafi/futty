@@ -60,14 +60,23 @@
       m.matrixAutoUpdate = false;
       scene.add(m);
     }
+    batches = {}; // so a later flush only adds what was built since
   }
 
   // collider + visual
   function B(x0, z0, x1, z1, y0, y1, key, opt) {
     opt = opt || {};
     if (!opt.noCollide) P.add({ x0, y0, z0, x1, y1, z1, mat: opt.mat || matOf(key), pen: !!opt.pen, walk: !!opt.walk, cover: opt.cover !== false });
-    if (!opt.invisible) visBox(x0, y0, z0, x1, y1, z1, key, opt);
+    if (!opt.invisible) {
+      visBox(x0, y0, z0, x1, y1, z1, key, opt);
+      // break up the hard box silhouette: concrete coping on top, a plinth at the foot
+      if (TRIM[key] && y1 - y0 >= 1.9 && !opt.noTrim) {
+        visBox(x0 - 0.06, y1 - 0.1, z0 - 0.06, x1 + 0.06, y1 + 0.05, z1 + 0.06, 'trim', { noAO: true, tex: 2 });
+        if (y0 < 0.05) visBox(x0 - 0.035, y0, z0 - 0.035, x1 + 0.035, y0 + 0.22, z1 + 0.035, 'trim', { tex: 2 });
+      }
+    }
   }
+  const TRIM = { concrete: 1, brick: 1, plaster: 1, metal: 1, tile: 1, sewer: 1 };
   function matOf(key) {
     if (key.startsWith('cont') || key === 'metal' || key === 'dark' || key === 'rail') return 'metal';
     if (key === 'wood' || key === 'plywood') return 'wood';
@@ -147,32 +156,36 @@
   function makeMats(gfx) {
     const T = VG.Tex;
     const std = (o) => new THREE.MeshStandardMaterial(Object.assign({ vertexColors: true, roughness: 0.9, metalness: 0 }, o));
+    // PBR: every surface gets a normal map (Sobel over its own pixels) and a roughness map
+    const nv = (k) => new THREE.Vector2(k, k);
+    const pbr = (tex, o, ns, rb, rr, inv) => std(Object.assign({ map: T[tex](), normalMap: T.normal(tex, ns), normalScale: nv(0.9), roughnessMap: T.rough(tex, rb, rr, inv), roughness: 1 }, o));
     mats = {
-      concrete: std({ map: T.concrete() }),
-      brick: std({ map: T.brick() }),
-      metal: std({ map: T.metal(), roughness: 0.65, metalness: 0.1, color: 0xc4cac8 }),
-      wood: std({ map: T.wood(), roughness: 0.85 }),
-      plywood: std({ map: T.plywood() }),
-      barrier: std({ map: T.barrier() }),
-      contRed: std({ map: T.container(), color: 0xa8402e, roughness: 0.7, metalness: 0.2 }),
-      contBlue: std({ map: T.container(), color: 0x2f5c8a, roughness: 0.7, metalness: 0.2 }),
-      contGreen: std({ map: T.container(), color: 0x4c6b3a, roughness: 0.7, metalness: 0.2 }),
-      contOrange: std({ map: T.container(), color: 0xc4772b, roughness: 0.7, metalness: 0.2 }),
-      dark: std({ color: 0x6a6e70, roughness: 0.7, metalness: 0.2 }),
-      rail: std({ color: 0x5a5f5e, roughness: 0.5, metalness: 0.6 }),
-      roof: std({ map: T.metal(), color: 0xd0d4d2, roughness: 0.8, metalness: 0, emissive: 0x2a2a28 }),
-      floor: std({ map: T.concrete(), color: 0xbab3a3 }),
-      lamp: new THREE.MeshBasicMaterial({ color: 0xfff1c8 }),
-      // campaign surfaces
-      plaster: std({ map: T.concrete(), color: 0xa89a80 }),
-      wallpaper: std({ map: T.plywood(), color: 0x7d6d5a }),
-      tile: std({ map: T.concrete(), color: 0xd8dcd6 }),
-      sewer: std({ map: T.brick(), color: 0x6c7a62 }),
-      rubble: std({ map: T.concrete(), color: 0x6e665c }),
-      burnt: std({ map: T.metal(), color: 0x3a3634, roughness: 0.9 }),
-      cloth: std({ color: 0x8a7a68, roughness: 1 }),
-      redlamp: new THREE.MeshBasicMaterial({ color: 0xff5a3a }),
+      concrete: pbr('concrete', {}, 2.4, 0.86, 0.12),
+      brick: pbr('brick', {}, 3, 0.9, 0.08),
+      metal: pbr('metal', { color: 0xc4cac8, metalness: 0.55, envMapIntensity: 0.9 }, 4, 0.5, 0.22),
+      wood: pbr('wood', {}, 2.5, 0.8, 0.15),
+      plywood: pbr('plywood', {}, 1.6, 0.8, 0.1),
+      barrier: pbr('barrier', { normalScale: new THREE.Vector2(0.45, 0.45) }, 1.2, 0.85, 0.06),
+      contRed: pbr('container', { color: 0xa8402e, metalness: 0.45, normalScale: new THREE.Vector2(0.55, 0.55) }, 2.2, 0.5, 0.18),
+      contBlue: pbr('container', { color: 0x2f5c8a, metalness: 0.45, normalScale: new THREE.Vector2(0.55, 0.55) }, 2.2, 0.5, 0.18),
+      contGreen: pbr('container', { color: 0x4c6b3a, metalness: 0.45, normalScale: new THREE.Vector2(0.55, 0.55) }, 2.2, 0.5, 0.18),
+      contOrange: pbr('container', { color: 0xc4772b, metalness: 0.45, normalScale: new THREE.Vector2(0.55, 0.55) }, 2.2, 0.5, 0.18),
+      dark: std({ color: 0x6a6e70, roughness: 0.45, metalness: 0.6 }),
+      rail: std({ color: 0x5a5f5e, roughness: 0.38, metalness: 0.8 }),
+      roof: pbr('metal', { color: 0xd0d4d2, metalness: 0.45, emissive: 0x2a2a28 }, 4, 0.55, 0.25),
+      floor: pbr('concrete', { color: 0xbab3a3 }, 2, 0.7, 0.2),
+      trim: pbr('concrete', { color: 0x8c877c }, 2, 0.8, 0.1),
+      lamp: new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff1c8).multiplyScalar(3) }),
       skyline: new THREE.MeshLambertMaterial({ color: 0x9aa6ad }),
+      // campaign surfaces
+      plaster: pbr('concrete', { color: 0xa89a80 }, 2, 0.88, 0.1),
+      wallpaper: pbr('plywood', { color: 0x7d6d5a }, 1.2, 0.85, 0.1),
+      tile: pbr('concrete', { color: 0xd8dcd6 }, 1.5, 0.35, 0.2),
+      sewer: pbr('brick', { color: 0x6c7a62 }, 3, 0.32, 0.25), // wet brick
+      rubble: pbr('concrete', { color: 0x6e665c }, 3.5, 0.92, 0.06),
+      burnt: pbr('metal', { color: 0x3a3634, metalness: 0.3 }, 3, 0.85, 0.1),
+      cloth: std({ color: 0x8a7a68, roughness: 1 }),
+      redlamp: new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff5a3a).multiplyScalar(3) }),
     };
     if (gfx === 0) for (const k in mats) if (mats[k].map) mats[k].map.anisotropy = 1;
   }
@@ -207,9 +220,9 @@
     const Bd = M.BOUNDS;
 
     // ground
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshStandardMaterial({ map: VG.Tex.asphalt(), roughness: 0.95 }));
-    ground.material.map = ground.material.map.clone(); ground.material.map.needsUpdate = true;
-    ground.material.map.repeat.set(70, 70);
+    const rep70 = (t) => { const c = t.clone(); c.needsUpdate = true; c.repeat.set(70, 70); return c; };
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshStandardMaterial({
+      map: rep70(VG.Tex.asphalt()), normalMap: rep70(VG.Tex.normal('asphalt', 2.2)), roughnessMap: rep70(VG.Tex.rough('asphalt', 0.9, 0.08)), roughness: 1 }));
     ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true;
     scene.add(ground);
     // painted lines in the courtyard (visual only)
@@ -309,6 +322,63 @@
       visBox(x - w / 2, 0, z - d / 2, x + w / 2, h, z + d / 2, 'skyline', { noAO: true });
     }
 
+    // ===== chain-link fences (bullets pass, players don't) =====
+    const fences = [[24.5, -33, 29, -33], [-16, 37.5, -9, 37.5], [8, -37.5, 15, -37.5]];
+    for (const [x0, z0, x1, z1] of fences) {
+      B(Math.min(x0, x1), Math.min(z0, z1) - 0.05, Math.max(x0, x1), Math.max(z0, z1) + 0.05, 0, 2.2, 'rail', { invisible: true, pen: true, cover: false });
+      for (const x of [x0, (x0 + x1) / 2, x1]) visBox(x - 0.04, 0, z0 - 0.04, x + 0.04, 2.25, z0 + 0.04, 'rail', { noAO: true });
+      visBox(x0, 2.18, z0 - 0.03, x1, 2.24, z0 + 0.03, 'rail', { noAO: true });
+    }
+
+    flush();
+
+    // fence mesh: alpha-tested, double sided
+    const flTex = VG.Tex.chainLink().clone(); flTex.needsUpdate = true;
+    for (const [x0, z0, x1] of fences) {
+      const len = Math.abs(x1 - x0), t = flTex.clone(); t.needsUpdate = true; t.repeat.set(len / 0.6, 2.2 / 0.6);
+      const f = new THREE.Mesh(new THREE.PlaneGeometry(len, 2.15), new THREE.MeshStandardMaterial({ map: t, alphaTest: 0.5, side: THREE.DoubleSide, metalness: 0.7, roughness: 0.4 }));
+      f.position.set((x0 + x1) / 2, 1.08, z0); f.castShadow = true; scene.add(f);
+    }
+
+    // ===== ground detail: glossy puddles, rubble, cardboard, pallets =====
+    const prng = mulberry(31);
+    const pudMat = new THREE.MeshStandardMaterial({ map: VG.Tex.puddle(), transparent: true, depthWrite: false, roughness: 0.04, metalness: 0.0, envMapIntensity: 1.6, polygonOffset: true, polygonOffsetFactor: -2 });
+    const pudGeo = new THREE.PlaneGeometry(1, 1); pudGeo.rotateX(-Math.PI / 2);
+    for (let i = 0, n = 0; i < 80 && n < 16; i++) {
+      const x = -40 + prng() * 80, z = -50 + prng() * 100;
+      if (!P.fits(x, 0.05, z, 1.4, 0.3)) continue;
+      const pm = new THREE.Mesh(pudGeo, pudMat); const s = 1.4 + prng() * 2.6;
+      pm.position.set(x, 0.012 + n * 0.0004, z); pm.scale.set(s, 1, s * (0.6 + prng() * 0.6)); pm.rotation.y = prng() * 6; pm.receiveShadow = true; scene.add(pm); n++;
+    }
+    const scatter = (geo, mat, count, near, sz) => {
+      const inst = new THREE.InstancedMesh(geo, mat, count), mx = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
+      let n = 0;
+      for (let i = 0; i < count * 6 && n < count; i++) {
+        const b = P.boxes[(prng() * P.boxes.length) | 0];
+        if (!b || b.y0 > 0.05 || b.y1 < 0.8) continue;
+        // drop it at the foot of a wall or container, where rubbish collects
+        const side = (prng() * 4) | 0, t = prng();
+        let x = side < 2 ? b.x0 + (b.x1 - b.x0) * t : (side === 2 ? b.x0 - near * prng() - 0.15 : b.x1 + near * prng() + 0.15);
+        let z = side >= 2 ? b.z0 + (b.z1 - b.z0) * t : (side === 0 ? b.z0 - near * prng() - 0.15 : b.z1 + near * prng() + 0.15);
+        if (!P.fits(x, 0.02, z, 0.12, 0.1)) continue;
+        const k = sz[0] + prng() * (sz[1] - sz[0]);
+        e.set(prng() * 0.4, prng() * 6.3, prng() * 0.4); q.setFromEuler(e); sc.set(k, k * (0.5 + prng() * 0.6), k); ps.set(x, k * 0.25, z);
+        mx.compose(ps, q, sc); inst.setMatrixAt(n++, mx);
+      }
+      inst.count = n; inst.castShadow = true; inst.receiveShadow = true; scene.add(inst);
+    };
+    scatter(new THREE.DodecahedronGeometry(1, 0), mats.rubble, 220, 0.6, [0.05, 0.16]);
+    scatter(new THREE.BoxGeometry(1, 0.3, 0.8), new THREE.MeshStandardMaterial({ color: 0x9a7a52, roughness: 0.95 }), 24, 1.2, [0.35, 0.6]);
+    // pallets: slats on runners, lying where they were dropped (low enough to walk over)
+    const slat = new THREE.BoxGeometry(1.2, 0.025, 0.1), runner = new THREE.BoxGeometry(0.1, 0.1, 1.0);
+    for (const [x, z, r] of [[-30, -36, 0.3], [-29.4, -37.6, 1.2], [26, 12, 0.1], [-18, 40, 2.2], [14, -52, 0.8], [-40, 18, 0.5]]) {
+      const pg = new THREE.Group();
+      for (let k = 0; k < 7; k++) { const sm = new THREE.Mesh(slat, mats.plywood); sm.position.set(0, 0.112, -0.45 + k * 0.15); pg.add(sm); }
+      for (const xx of [-0.5, 0, 0.5]) { const rm = new THREE.Mesh(runner, mats.wood); rm.position.set(xx, 0.05, 0); pg.add(rm); }
+      pg.position.set(x, 0, z); pg.rotation.y = r; pg.traverse(o => { o.castShadow = o.receiveShadow = true; }); scene.add(pg);
+    }
+    // curbs along the courtyard lane lines
+    for (const x of [-21.3, 17.3]) visBox(x - 0.15, 0, -25, x + 0.15, 0.12, 25, 'trim', { tex: 2 });
     flush();
 
     // ===== photo billboards and posters =====
