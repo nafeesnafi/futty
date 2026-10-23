@@ -185,12 +185,15 @@ wins (10-minute limit). Every sound is generated in the browser with the Web Aud
 | Scoreboard · FPS counter · pause | Tab · F · Esc |
 
 **Campaign: Operation Ashes of Verdan** (content warning: military trauma, civilian casualties, moral distress).
-A three-chapter story about rules of engagement and what survivors carry. You play Staff Sergeant Sean Miller
-hunting a target through a besieged city:
+A six-chapter story (about 30 minutes) about rules of engagement and what survivors carry. You play Staff
+Sergeant Sean Miller, sent to hunt a "traitor" through a besieged city:
 
-1. *Rules of Engagement*: a pitch-black tenement in a thunderstorm (night vision on N, flashlight on L).
-2. *Collateral Protocol*: a hospital square under sniper fire, with an offered mortar strike.
-3. *The Cost of Survival*: flooded tunnels under the dam, and a reckoning.
+1. *Arrival*: Checkpoint Echo at dusk. A promise to Davis's mother, a boy at the wire, then the first attack.
+2. *Rules of Engagement*: a pitch-black tenement in a thunderstorm (night vision on N, flashlight on L).
+3. *The Boy Who Knew the Streets*: Mirko guides the squad through the old market's back alleys.
+4. *Collateral Protocol*: a hospital square under sniper fire, with an offered mortar strike.
+5. *Kaserna*: a village school at night, and the evidence of what happened there (E to examine).
+6. *The Cost of Survival*: flooded tunnels under the dam, and a reckoning.
 
 Each chapter ends in a timed decision: time slows, sound drops away under a heartbeat and tinnitus, and you have a
 few seconds to press F, E (or Q) before the bar burns out. Doing nothing is also a choice. Choices feed a

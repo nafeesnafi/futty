@@ -94,7 +94,7 @@
     ['w1', 'Assault rifle', 'Digit1'], ['w2', 'SMG', 'Digit2'], ['w3', 'Sniper rifle', 'Digit3'],
     ['uav', 'UAV', 'Digit4'], ['air', 'Airstrike', 'Digit5'], ['board', 'Scoreboard (hold)', 'Tab'], ['fps', 'FPS counter', 'KeyF'],
     ['talk', 'Push to talk (online)', 'KeyV'],
-    ['light', 'Flashlight (campaign)', 'KeyL'], ['nv', 'Night vision (campaign)', 'KeyN'],
+    ['light', 'Flashlight (campaign)', 'KeyL'], ['nv', 'Night vision (campaign)', 'KeyN'], ['use', 'Examine (campaign)', 'KeyE'],
   ];
   const DEF = {}; for (const [a, , c] of ACTIONS) DEF[a] = c;
   const DEFAULT_CODES = new Set(Object.values(DEF));

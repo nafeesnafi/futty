@@ -452,3 +452,8 @@ body:not(.campaign) #objective { display: none; }
 #nvOverlay.on { background: repeating-linear-gradient(0deg, rgba(0,0,0,.2) 0 1px, transparent 1px 3px), radial-gradient(ellipse at center, rgba(60,255,110,.10) 40%, rgba(0,0,0,.9) 95%); }
 body.lowfx #tunnel { backdrop-filter: none; -webkit-backdrop-filter: none; -webkit-mask-image: none; mask-image: none; }
 body.deciding #crosshair, body.deciding #aimName, body.letterbox #aimName, body.deciding #hitmarker { opacity: 0 !important; }
+#useHint { position: fixed; left: 50%; top: 60%; transform: translateX(-50%); z-index: 6; pointer-events: none;
+  font: 700 17px Rajdhani, sans-serif; letter-spacing: 2px; color: #f2e6c8; text-shadow: 0 1px 4px #000; }
+#touch #tUse { left: auto; right: calc(186px + env(safe-area-inset-right)); top: auto; bottom: 170px; width: 64px; height: 64px; display: none; border-color: rgba(255,220,140,.8); }
+#touch #tUse.show { display: flex; }
+body:not(.campaign) #useHint { display: none; }
