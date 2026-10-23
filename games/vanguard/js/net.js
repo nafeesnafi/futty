@@ -62,14 +62,15 @@
     for (const c of N.conns.values()) { try { c.close(); } catch (_) { /* ignore */ } }
     try { if (N.host) N.host.close(); } catch (_) { /* ignore */ }
     try { if (N.peer) N.peer.destroy(); } catch (_) { /* ignore */ }
-    N.peer = null; N.host = null; N.conns = new Map(); N.inMatch = false; N.players = [];
+    try { if (N.relay) N.relay.close(); } catch (_) { /* ignore */ }
+    N.peer = null; N.host = null; N.relay = null; N.conns = new Map(); N.inMatch = false; N.players = [];
     G.net = null;
   }
 
   // ---------- lobby: host ----------
   function create() {
     destroy();
-    if (!window.Peer) return fail('Online play needs the PeerJS library, which didn\'t load.');
+    if (!window.Peer && !window.FSRelay) return fail('Online play needs the PeerJS library, which didn\'t load.');
     status('Creating lobby…'); withIce(createNow);
   }
   function createNow(ice) {
@@ -78,22 +79,34 @@
     N.players = [{ id: 'h', name: myName(), team: 0, pid: PREFIX + N.code }];
     N.nextId = 1;
     status('Creating lobby…'); render();
+    // guests reach us directly (WebRTC) or, when their network blocks that, through the internet relay
+    if (window.FSRelay) {
+      const relay = N.relay = FSRelay.listen('vanguard', N.code, acceptGuest);
+      relay.onready = () => { if (N.relay === relay) { status(''); render(); } };
+    }
+    if (!window.Peer) return;
     const peer = N.peer = new Peer(PREFIX + N.code, peerOptions(ice));
     if (VG.Voice) VG.Voice.attach(peer);
     peer.on('open', () => { status(''); render(); });
-    peer.on('connection', (conn) => {
-      conn.on('open', () => {
-        if (N.players.length >= N.size * 2) { conn.send({ t: 'full' }); setTimeout(() => conn.close(), 300); return; }
-        if (N.inMatch) { conn.send({ t: 'busy' }); setTimeout(() => conn.close(), 300); return; }
-        const id = 'p' + N.nextId++;
-        conn.vgId = id; N.conns.set(id, conn);
-        conn.on('data', (m) => onHostData(id, m));
-        conn.on('close', () => guestLeft(id));
-        conn.on('error', () => guestLeft(id));
-      });
+    peer.on('connection', acceptGuest);
+    peer.on('error', (err) => {
+      if (err.type === 'unavailable-id') { create(); return; }
+      if (N.inMatch || err.type === 'peer-unavailable') return;
+      if (N.relay && N.relay.ready) { status(''); render(); return; } // direct play is down, the relay still works
+      fail(errorText(err));
     });
-    peer.on('error', (err) => { if (err.type === 'unavailable-id') { create(); return; } if (!N.inMatch) fail(errorText(err)); });
     peer.on('disconnected', () => { try { peer.reconnect(); } catch (_) { /* ignore */ } });
+  }
+  function acceptGuest(conn) {
+    conn.on('open', () => {
+      if (N.players.length >= N.size * 2) { conn.send({ t: 'full' }); setTimeout(() => conn.close(), 300); return; }
+      if (N.inMatch) { conn.send({ t: 'busy' }); setTimeout(() => conn.close(), 300); return; }
+      const id = 'p' + N.nextId++;
+      conn.vgId = id; N.conns.set(id, conn);
+      conn.on('data', (m) => onHostData(id, m));
+      conn.on('close', () => guestLeft(id));
+      conn.on('error', () => guestLeft(id));
+    });
   }
 
   function teamCount(t) { return N.players.filter(p => p.team === t).length; }
@@ -118,7 +131,7 @@
         if (m.v !== PROTOCOL) { sendTo(id, { t: 'reject' }); return; }
         if (pl) return;
         const team = teamCount(0) <= teamCount(1) ? 0 : 1;
-        N.players.push({ id, name: str(m.name) || 'Player', team, pid: c ? c.peer : null });
+        N.players.push({ id, name: str(m.name) || 'Player', team, pid: c && !c.relay ? c.peer : null, relay: !!(c && c.relay) });
         sendLobby(); return;
       }
       case 'team':
@@ -171,27 +184,55 @@
     code = cleanCode(code);
     if (code.length !== 6) { N.error = 'Lobby codes are 6 characters, like K7QX2M.'; render(); return; }
     destroy();
-    if (!window.Peer) return fail('Online play needs the PeerJS library, which didn\'t load.');
+    if (!window.Peer && !window.FSRelay) return fail('Online play needs the PeerJS library, which didn\'t load.');
     status('Connecting…'); withIce(ice => joinNow(code, ice));
   }
+  // direct WebRTC first (lowest delay, voice chat works); if that hasn't connected within a few seconds
+  // (mobile data, strict routers), switch to the internet relay
+  const DIRECT_WAIT = 6000;
   function joinNow(code, ice) {
     destroy();
     N.role = 'guest'; N.code = code; N.error = ''; status('Connecting…'); render();
+    const forceRelay = new URLSearchParams(location.search).get('viarelay') === '1'; // testing aid
+    if (!window.Peer || forceRelay) { joinRelay(code); return; }
     const peer = N.peer = new Peer(undefined, peerOptions(ice));
     if (VG.Voice) VG.Voice.attach(peer);
+    let direct = null;
     peer.on('open', () => {
-      const conn = N.host = peer.connect(PREFIX + code, { reliable: true, serialization: 'json' });
-      conn.on('open', () => { conn.send({ t: 'hello', v: PROTOCOL, name: myName() }); status(''); });
-      conn.on('data', onGuestData);
-      conn.on('close', () => hostGone());
-      conn.on('error', () => hostGone());
-      setTimeout(() => { if (N.role === 'guest' && N.code === code && !N.players.length && N.peer === peer) fail(stuck(conn) ? NET_FAIL : `Couldn't connect to lobby ${code}. Check the code and that the host is still waiting.`); }, 15000);
+      const conn = direct = N.host = peer.connect(PREFIX + code, { reliable: true, serialization: 'json' });
+      wireHost(conn);
     });
-    peer.on('error', (err) => { if (!N.inMatch) fail(errorText(err)); });
+    peer.on('error', (err) => {
+      if (N.inMatch || N.peer !== peer) return;
+      if (err.type === 'peer-unavailable' && !window.FSRelay) { fail(errorText(err)); return; }
+      joinRelay(code); // the host may only be reachable through the relay
+    });
+    setTimeout(() => {
+      if (N.role !== 'guest' || N.code !== code || N.peer !== peer || (direct && direct.open)) return;
+      if (window.FSRelay) joinRelay(code);
+      else fail(stuck(direct) ? NET_FAIL : `Couldn't connect to lobby ${code}. Check the code and that the host is still waiting.`);
+    }, DIRECT_WAIT);
+  }
+  function joinRelay(code) {
+    if (N.role !== 'guest' || N.code !== code || (N.host && N.host.relay)) return;
+    // drop the direct attempt so the host doesn't see us twice (no voice over the relay)
+    const old = N.host; N.host = null;
+    try { if (old) old.close(); } catch (_) { /* ignore */ }
+    try { if (N.peer) N.peer.destroy(); } catch (_) { /* ignore */ }
+    N.peer = null; if (VG.Voice) VG.Voice.reset();
+    const conn = N.host = FSRelay.dial('vanguard', code);
+    wireHost(conn);
+    conn.on('error', () => { if (N.host === conn && !N.players.length) fail(`Couldn't connect to lobby ${code}. Check the code and that the host is still waiting.`); });
+  }
+  function wireHost(conn) {
+    conn.on('open', () => { if (N.host !== conn) return; conn.send({ t: 'hello', v: PROTOCOL, name: myName() }); status(conn.relay ? 'Connected through the internet relay (voice chat needs a direct connection).' : ''); });
+    conn.on('data', (m) => { if (N.host === conn) onGuestData(m); });
+    conn.on('close', () => { if (N.host === conn) hostGone(); });
+    if (!conn.relay) conn.on('error', () => { if (N.host === conn) hostGone(); });
   }
 
   function hostGone() {
-    if (N.role !== 'guest' || !N.peer) return;
+    if (N.role !== 'guest' || !N.host) return;
     const was = N.inMatch;
     fail(was ? 'The host left the match.' : 'The connection to the host closed.');
   }
@@ -258,10 +299,11 @@
     N.sendT -= dt;
     if (N.sendT > 0) return;
     N.sendT = 0.05;
-    const p = G.player;
+    N.tick = (N.tick + 1) | 0;
+    const p = G.player, slow = N.tick % 2 === 1; // relay links get every other update (10 Hz) to go easy on the shared brokers
     const now = performance.now();
     if (N.role === 'guest') {
-      if (p.alive) toHost({ t: 'me', s: [r2(p.pos.x), r2(p.pos.y), r2(p.pos.z), r2(p.yaw), r2(p.pitch), r2(p.height), VG.WEAPON_ORDER.indexOf(p.cur), p.score] });
+      if (p.alive && !(slow && N.host && N.host.relay)) toHost({ t: 'me', s: [r2(p.pos.x), r2(p.pos.y), r2(p.pos.z), r2(p.yaw), r2(p.pitch), r2(p.height), VG.WEAPON_ORDER.indexOf(p.cur), p.score] });
       if (now - (N.lastHost || now) > 15000) hostGone();
       return;
     }
@@ -276,7 +318,8 @@
       const w = VG.WEAPON_ORDER.indexOf(e.isPlayer ? e.cur : e.wpn);
       a.push([e.id, r2(e.pos.x), r2(e.pos.y), r2(e.pos.z), r2(yaw || 0), r2(pitch || 0), r2(e.height), w, e.alive ? 1 : 0, Math.round(e.health), e.kills, e.deaths, e.score]);
     }
-    broadcast({ t: 's', a, tk: G.teamKills, tl: Math.round(G.timeLeft) });
+    const snap = { t: 's', a, tk: G.teamKills, tl: Math.round(G.timeLeft) };
+    for (const c of N.conns.values()) if (!(slow && c.relay)) sendConn(c, snap);
   };
 
   function applySnap(m) {
@@ -386,7 +429,7 @@
   $('onCopy').addEventListener('click', () => {
     const u = new URL(location.href.split(/[?#]/)[0]), q = new URLSearchParams(location.search);
     u.searchParams.set('join', N.code);
-    for (const k of ['peerhost', 'peerport', 'peerpath', 'peersecure', 'peerice', 'turn', 'turnuser', 'turnpass']) if (q.get(k)) u.searchParams.set(k, q.get(k));
+    for (const k of ['peerhost', 'peerport', 'peerpath', 'peersecure', 'peerice', 'turn', 'turnuser', 'turnpass', 'relay']) if (q.get(k)) u.searchParams.set(k, q.get(k));
     const url = u.toString();
     const done = () => { $('onCopy').textContent = 'LINK COPIED'; setTimeout(() => { $('onCopy').textContent = 'COPY INVITE LINK'; }, 1600); };
     if (navigator.share && G.touch) navigator.share({ title: 'Vanguard Web', text: `Join my Vanguard Web lobby: ${N.code}`, url }).catch(() => {});

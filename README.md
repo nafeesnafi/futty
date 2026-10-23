@@ -219,9 +219,15 @@ saved after each chapter. Code: `js/narrative.js` (decisions, subtitles), `js/tr
 Friends join with the code; everyone can switch teams, and the host picks the format and starts the match.
 Empty slots are filled with bots, and a bot takes over if a player leaves. The host's browser runs the
 match (bots, health, kills, respawns); each player moves their own soldier and reports their own hits, so
-shooting feels instant. Kill goal: 15 (1v1), 20 (2v2), 30 (4v4). Like Futt Champions, it connects
-browsers directly over WebRTC using the free PeerJS server, so it needs a normal web address, and the same
-`?peerhost=…` parameters work for a self-hosted PeerServer.
+shooting feels instant. Kill goal: 15 (1v1), 20 (2v2), 30 (4v4).
+
+Online play works between any networks (different Wi-Fi, mobile data). A guest first tries a direct WebRTC
+connection, through a TURN relay when one is set up (see *Online play between different networks* below).
+If that hasn't connected within 6 seconds, it switches to the same internet relay as Sepia Duel: game
+messages pass through free public MQTT brokers (`games/shared/lib/relay.js`), at 10 updates a second instead
+of 20. Voice chat needs a direct (or TURN) connection, so it is off for players on the internet relay; the
+lobby says when that happens. `?viarelay=1` forces the internet relay for testing (`?relay=wss://…` uses your own broker), and `?peerhost=…` points
+the game at a self-hosted PeerServer.
 
 **Voice chat.** In an online lobby, pick *Push to talk* (hold V, or the MIC button on phones), *Open mic*,
 *Listen only* or *Off*. Everyone hears everyone in the lobby; in a match you only hear your own team. Each
@@ -320,29 +326,24 @@ Validation tests: `node --test games/spacesuit-explorer/test/validate.test.js`
 
 ## 🌐 Online play between different networks (relay setup)
 
-Futt Champions, Vanguard Web and Sepia Duel connect players' browsers directly (WebRTC). That always works on
-the same Wi-Fi, but between different networks it often doesn't: most mobile networks and many home routers
-(carrier-grade NAT, strict firewalls) block direct connections. Then the game traffic has to go through a
-**TURN relay server**. The free PeerJS relays the games used before are shared and often unreachable, which is
-why online play could fail outside one Wi-Fi.
+All three online games work across networks without any setup: Futt Champions and Sepia Duel fall back to
+their internet relay, and Vanguard Web falls back to `games/shared/lib/relay.js`. A **TURN server** is
+optional, but it makes the connection better. Games then connect through TURN instead of the shared public
+brokers, so there is less delay, Vanguard plays at the full 20 updates a second, and Vanguard's voice chat
+works between different networks. Without it, voice chat only works when a direct connection is possible.
+Vanguard asks the site's serverless function `api/turn.js` for short-lived TURN credentials (the secret key
+stays on the server). Set it up once:
 
-The site now has a small serverless function, `api/turn.js`, that gives each player short-lived relay
-credentials (the secret key stays on the server). It needs a relay provider, set up once:
-
-1. **Get a free TURN key from Cloudflare** (recommended; generous free tier). Sign in at
-   [dash.cloudflare.com](https://dash.cloudflare.com), open **Realtime → TURN Server**, create a TURN key,
-   and copy its **Turn Token ID** and **API Token**.
+1. **Get a free TURN key from Cloudflare.** Sign in at [dash.cloudflare.com](https://dash.cloudflare.com),
+   open **Realtime → TURN Server**, create a TURN key, and copy its **Turn Token ID** and **API Token**.
 2. **Add them to Vercel.** In the Vercel project: **Settings → Environment Variables**, add
-   `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_API_TOKEN` (for Production, Preview and Development).
+   `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_API_TOKEN`.
 3. **Redeploy** (Deployments → ⋯ → Redeploy), so the function picks up the new variables.
 4. **Check it.** Open `https://<your-site>/api/turn`: it should show `{"iceServers":[...]}`. A
    `"No TURN provider configured"` message means the variables aren't set on that deployment yet.
 
 Other providers work too: Metered.ca (`METERED_TURN_DOMAIN`, `METERED_TURN_API_KEY`), or any TURN server
-(`TURN_URLS` comma separated, `TURN_USERNAME`, `TURN_CREDENTIAL`). Without any of these the games still try
-direct connections and the public PeerJS relays, as before. Players on the same network still connect
-directly; the relay is only used when nothing else works.
-
-Testing switches (add to a game's address): `?peerrelay=1` forces every connection through the relay, and
-`?turn=turn:host:3478&turnuser=…&turnpass=…` uses a specific relay server. Invite links keep these settings.
-Code: `games/shared/lib/ice.js` (browser side) and `api/turn.js` (server side).
+(`TURN_URLS` comma separated, `TURN_USERNAME`, `TURN_CREDENTIAL`). Testing switches for Vanguard:
+`?peerrelay=1` forces connections through TURN, and `?turn=turn:host:3478&turnuser=…&turnpass=…` uses a
+specific TURN server. Invite links keep these settings. Code: `games/shared/lib/ice.js` (browser side)
+and `api/turn.js` (server side).
