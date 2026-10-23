@@ -11,7 +11,21 @@
   const DIFF = {
     reaction: [0.7, 0.45, 0.26], aimErr: [4.2, 2.6, 1.5], turn: [4, 6.5, 10], dmg: [0.5, 0.72, 0.92], head: [0.04, 0.1, 0.2],
   };
-  const CAMO = [[0x5b5a3c, 0x6b6a48], [0x4a4f3e, 0x3d4232], [0x6e6450, 0x8a7c5e], [0x3f4448, 0x2f3438], [0x5c4b3a, 0x786451], [0x46503c, 0x58614a]];
+  // uniform colours, kept light enough to read against concrete and asphalt
+  const CAMO = [[0x6e6c48, 0x807e56], [0x5f6650, 0x535a44], [0x7a705a, 0x968868], [0x5c6266, 0x4c5358], [0x6c5a46, 0x86705a], [0x56614a, 0x6a7558]];
+  // soft rim light on soldiers so their silhouette reads against the level (lower in the campaign's dark levels)
+  const RIM = VG.SOLDIER_RIM = { value: 0.38 };
+  const RIM_COL = new THREE.Color(0.75, 0.8, 0.85);
+  function rim(m) {
+    m.onBeforeCompile = (sh) => {
+      sh.uniforms.rimStr = RIM; sh.uniforms.rimCol = { value: RIM_COL };
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform float rimStr; uniform vec3 rimCol;')
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n\t{ float rf = 1.0 - max(dot(normalize(vViewPosition), normal), 0.0); totalEmissiveRadiance += rimCol * rimStr * rf * rf * rf; }');
+    };
+    m.customProgramCacheKey = () => 'vgSoldierRim';
+    return m;
+  }
 
   function wrap(a) { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; }
   const rnd = (a, b) => a + Math.random() * (b - a);
@@ -96,7 +110,7 @@
       sleeves.push(limb(S, E, 0.056, 0.047), limb(E, H, 0.046, 0.038));
       gloves.push(xf(new THREE.SphereGeometry(0.045, 8, 6), H.x, H.y, H.z, 0, 0, 0, 0.85, 0.75, 1.25));
       const bandAt = S.clone().lerp(E, 0.35);
-      bands.push(limb(bandAt, S.clone().lerp(E, 0.5), 0.06, 0.058));
+      bands.push(limb(bandAt, S.clone().lerp(E, 0.62), 0.066, 0.062));
       const out = E.clone().sub(S.clone().lerp(H, 0.5)).normalize();
       pads.push(xf(new THREE.SphereGeometry(0.05, 8, 6), E.x + out.x * 0.025, E.y + out.y * 0.025, E.z + out.z * 0.025, 0, 0, 0, 1, 1, 1));
     };
@@ -104,6 +118,8 @@
     arm(V(-0.2, 0.5, 0), V(0.05, 0.41, -0.52), V(-0.8, -0.6, 0));
     G.torso = merge([G.torso].concat(sleeves));
     G.gloves = merge(gloves); G.bands = merge(bands);
+    // team-coloured band around the helmet, readable from every side
+    G.helmetBand = merge([xf(cyl(0.134, 0.136, 0.03, 16), 0, 0.055, 0.005, -0.08, 0, 0, 1, 1, 1.1)]);
     G.rig = merge([G.rig].concat(pads));
     // head (balaclava and goggles go in the kit, so civilians show a plain face)
     G.head = merge([xf(new THREE.SphereGeometry(0.105, 12, 10), 0, 0, 0, 0, 0, 0, 0.92, 1.1, 1), xf(rbox(0.03, 0.045, 0.04, 0.01), 0, -0.01, -0.1)]);
@@ -136,12 +152,12 @@
 
     buildModel(idx) {
       const g = this.game, [pants, vest] = CAMO[idx % CAMO.length];
-      const mPants = new THREE.MeshStandardMaterial({ color: pants, roughness: 0.95 });
-      const mVest = new THREE.MeshStandardMaterial({ color: vest, roughness: 0.9 });
+      const mPants = rim(new THREE.MeshStandardMaterial({ color: pants, roughness: 0.95 }));
+      const mVest = rim(new THREE.MeshStandardMaterial({ color: vest, roughness: 0.9 }));
       const mSkin = new THREE.MeshStandardMaterial({ color: [0xc69c7d, 0x8d5f43, 0xe0b899, 0x6b4630][idx % 4], roughness: 0.8 });
-      const mDark = new THREE.MeshStandardMaterial({ color: 0x1f2020, roughness: 0.8 });
+      const mDark = rim(new THREE.MeshStandardMaterial({ color: 0x2a2b2a, roughness: 0.8 }));
       const teamCol = g.mode === 'tdm' ? (this.team === 0 ? 0x2f8fe0 : 0xd8352a) : 0x9a2a20;
-      const mBand = new THREE.MeshStandardMaterial({ color: teamCol, roughness: 0.6, emissive: teamCol, emissiveIntensity: 0.25 });
+      const mBand = new THREE.MeshStandardMaterial({ color: teamCol, roughness: 0.6, emissive: teamCol, emissiveIntensity: 0.45 });
       const G = soldierGeo();
       const mesh = (parent, geo, m, kit) => { const o = new THREE.Mesh(geo, m); o.castShadow = true; parent.add(o); if (kit) this.kit.push(o); return o; };
       const root = new THREE.Group();
@@ -163,7 +179,7 @@
       mesh(head, G.head, mSkin);
       // helmet kit: FAST shell, NVG, headset, balaclava and goggles (hidden as one for civilians and insurgents)
       const helmet = new THREE.Group(); head.add(helmet);
-      mesh(helmet, G.shell, mVest); mesh(helmet, G.headKit, mDark);
+      mesh(helmet, G.shell, mVest); mesh(helmet, G.headKit, mDark); mesh(helmet, G.helmetBand, mBand);
       const lens = mesh(helmet, G.goggles, GLASS); lens.castShadow = false;
       this.helmet = helmet; this.mats = { pants: mPants, vest: mVest, skin: mSkin, band: mBand };
       this.guns = {};

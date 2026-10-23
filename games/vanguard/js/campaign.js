@@ -60,6 +60,7 @@
 
   function newLevel(cfg) {
     G.buildCore();
+    if (VG.SOLDIER_RIM) VG.SOLDIER_RIM.value = 0.14; // subtler in the story's dusk and night scenes
     if (!G.player) G.player = new VG.Player(G);
     const scene = G.scene = new THREE.Scene();
     scene.background = new THREE.Color(cfg.bg);

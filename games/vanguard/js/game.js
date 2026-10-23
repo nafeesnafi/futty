@@ -539,6 +539,7 @@
   G.startMatch = (o) => startMatch(o);
   function startMatch(online) {
     const s = G.settings;
+    if (VG.SOLDIER_RIM) VG.SOLDIER_RIM.value = 0.38; // full silhouette rim in matches
     if (!online && VG.Net && VG.Net.role) VG.Net.leave();
     if (!online) G.net = null;
     G.online = online || null;
