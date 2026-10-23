@@ -178,6 +178,11 @@
     const f = noiseHit(o, t, 'bandpass', 1400, 0.8, 0.9, 0.03, 0.6);
     f.frequency.exponentialRampToValueAtTime(500, t + 0.6);
   };
+  A.brass = function (x, z) { // casing hitting the floor: two bright metallic tinks
+    if (!ctx) return; const sp = spatial(x, z); if (sp.d > 12) return;
+    const t = ctx.currentTime, o = out(0.05 / (1 + sp.d / 3), sp.pan), f = 3800 + Math.random() * 1600;
+    tone(o, t, 'triangle', f, f * 0.97, 0.6, 0.001, 0.07); tone(o, t + 0.06 + Math.random() * 0.04, 'triangle', f * 1.1, f, 0.35, 0.001, 0.05);
+  };
   A.ladder = function () { if (!ctx) return; click(ctx.currentTime, 900, 0.25); };
   A.impact = function (mat, x, z) {
     if (!ctx) return; const sp = spatial(x, z); if (sp.d > 30) return;

@@ -36,19 +36,39 @@
   const M = {};
   function mats() {
     if (M.metal) return M;
-    M.metal = new THREE.MeshStandardMaterial({ color: 0x666b70, roughness: 0.45, metalness: 0.25 });
-    M.poly = new THREE.MeshStandardMaterial({ color: 0x4a4c50, roughness: 0.7, metalness: 0.05 });
-    M.tan = new THREE.MeshStandardMaterial({ color: 0x8c7a58, roughness: 0.75, metalness: 0.05 });
-    M.green = new THREE.MeshStandardMaterial({ color: 0x48553a, roughness: 0.7, metalness: 0.1 });
-    M.glass = new THREE.MeshStandardMaterial({ color: 0x223344, roughness: 0.1, metalness: 0.9 });
-    M.dot = new THREE.MeshBasicMaterial({ color: 0xff2a1a });
+    // anodised aluminium / blued steel with micro-scratches; stippled polymer furniture
+    const T = VG.Tex, scratch = T.microNormal('gunmetal', 'scratch'), stipple = T.microNormal('stipple', 'stipple');
+    const sv = (k) => new THREE.Vector2(k, k);
+    M.metal = new THREE.MeshStandardMaterial({ color: 0x3a3e42, roughness: 0.34, metalness: 0.85, normalMap: scratch, normalScale: sv(0.35), envMapIntensity: 1.2 });
+    M.steel = new THREE.MeshStandardMaterial({ color: 0x2a2c2e, roughness: 0.28, metalness: 0.9, normalMap: scratch, normalScale: sv(0.25), envMapIntensity: 1.3 });
+    M.poly = new THREE.MeshStandardMaterial({ color: 0x2c2d30, roughness: 0.75, metalness: 0.05, normalMap: stipple, normalScale: sv(0.5) });
+    M.tan = new THREE.MeshStandardMaterial({ color: 0x9a8562, roughness: 0.72, metalness: 0.05, normalMap: stipple, normalScale: sv(0.45) });
+    M.green = new THREE.MeshStandardMaterial({ color: 0x48553a, roughness: 0.7, metalness: 0.1, normalMap: stipple, normalScale: sv(0.4) });
+    M.port = new THREE.MeshStandardMaterial({ color: 0x0c0c0d, roughness: 0.6, metalness: 0.5 });
+    M.glass = new THREE.MeshStandardMaterial({ color: 0x8fb4ff, roughness: 0.04, metalness: 1, transparent: true, opacity: 0.22, envMapIntensity: 2.4, depthWrite: false });
+    M.scopeGlass = new THREE.MeshStandardMaterial({ color: 0x223344, roughness: 0.05, metalness: 0.95, envMapIntensity: 2 });
+    M.dot = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff2a1a).multiplyScalar(5), depthTest: false, depthWrite: false, toneMapped: false }); // HDR: it blooms
     M.sleeve = new THREE.MeshStandardMaterial({ color: 0x5b5a3c, roughness: 0.95 });
     M.glove = new THREE.MeshStandardMaterial({ color: 0x24221f, roughness: 0.85 });
     M.skin = new THREE.MeshStandardMaterial({ color: 0xb0866a, roughness: 0.8 });
     return M;
   }
+  // rounded, bevelled box so edges catch specular highlights (cached per size)
+  const geoCache = {};
+  function bevelBox(w, h, d) {
+    const key = w + ',' + h + ',' + d;
+    if (geoCache[key]) return geoCache[key];
+    const b = Math.min(0.006, Math.min(w, h, d) * 0.2), r = b * 0.9;
+    const sw = w - 2 * b, sh = h - 2 * b, s = new THREE.Shape();
+    s.moveTo(-sw / 2 + r, -sh / 2); s.lineTo(sw / 2 - r, -sh / 2); s.quadraticCurveTo(sw / 2, -sh / 2, sw / 2, -sh / 2 + r);
+    s.lineTo(sw / 2, sh / 2 - r); s.quadraticCurveTo(sw / 2, sh / 2, sw / 2 - r, sh / 2); s.lineTo(-sw / 2 + r, sh / 2);
+    s.quadraticCurveTo(-sw / 2, sh / 2, -sw / 2, sh / 2 - r); s.lineTo(-sw / 2, -sh / 2 + r); s.quadraticCurveTo(-sw / 2, -sh / 2, -sw / 2 + r, -sh / 2);
+    const g = new THREE.ExtrudeGeometry(s, { depth: Math.max(0.001, d - 2 * b), bevelEnabled: true, bevelThickness: b, bevelSize: b, bevelSegments: 2, curveSegments: 2 });
+    g.center(); g.computeVertexNormals();
+    return (geoCache[key] = g);
+  }
   function box(g, w, h, d, mat, x, y, z, rx) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    const m = new THREE.Mesh(bevelBox(w, h, d), mat);
     m.position.set(x, y, z); if (rx) m.rotation.x = rx; g.add(m); return m;
   }
   function cyl(g, r, len, mat, x, y, z, seg) {
@@ -62,10 +82,15 @@
     let mag, muzzleZ, sightY;
     if (id === 'ar') {
       box(g, 0.055, 0.07, 0.30, m.metal, 0, 0.035, -0.06);       // receiver
-      box(g, 0.05, 0.02, 0.26, m.poly, 0, 0.08, -0.07);          // top rail
+      box(g, 0.05, 0.02, 0.26, m.metal, 0, 0.08, -0.07);         // top rail
+      for (let k = 0; k < 9; k++) box(g, 0.052, 0.006, 0.012, m.steel, 0, 0.092, 0.04 - k * 0.028); // rail slots
+      box(g, 0.004, 0.022, 0.05, m.port, 0.028, 0.045, -0.02);   // ejection port
+      box(g, 0.03, 0.012, 0.03, m.metal, 0, 0.072, 0.075);       // charging handle
+      box(g, 0.046, 0.05, 0.075, m.metal, 0, -0.01, -0.13);      // magwell
       box(g, 0.062, 0.062, 0.24, m.tan, 0, 0.03, -0.32);         // handguard
-      cyl(g, 0.011, 0.24, m.metal, 0, 0.035, -0.52);             // barrel
-      cyl(g, 0.017, 0.05, m.metal, 0, 0.035, -0.65);             // flash hider
+      for (let k = 0; k < 4; k++) box(g, 0.064, 0.012, 0.035, m.poly, 0, 0.03, -0.24 - k * 0.055); // grip ribs
+      cyl(g, 0.011, 0.24, m.steel, 0, 0.035, -0.52);             // barrel
+      cyl(g, 0.017, 0.05, m.steel, 0, 0.035, -0.65);             // flash hider
       box(g, 0.012, 0.04, 0.012, m.metal, 0, 0.07, -0.42);       // front post
       mag = box(g, 0.032, 0.15, 0.065, m.poly, 0, -0.07, -0.13, 0.22);
       box(g, 0.035, 0.1, 0.045, m.poly, 0, -0.04, 0.04, -0.3);   // grip
@@ -75,8 +100,9 @@
       box(g, 0.04, 0.012, 0.08, m.metal, 0, 0.096, -0.07);
       const hood = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.006, 6, 16), m.metal);
       hood.position.set(0, 0.124, -0.09); g.add(hood);
-      const dot = new THREE.Mesh(new THREE.CircleGeometry(0.0022, 8), m.dot);
-      dot.position.set(0, 0.124, -0.095); g.add(dot);
+      const lens = new THREE.Mesh(new THREE.CircleGeometry(0.019, 20), m.glass);
+      lens.position.set(0, 0.124, -0.088); g.add(lens);
+      g.userData.hood = hood;
       sightY = 0.124; muzzleZ = -0.68;
     } else if (id === 'smg') {
       box(g, 0.05, 0.075, 0.28, m.metal, 0, 0.035, -0.08);
@@ -106,13 +132,16 @@
       cyl(g, 0.026, 0.3, m.poly, 0, 0.13, -0.08, 14);           // scope tube
       cyl(g, 0.034, 0.07, m.poly, 0, 0.13, -0.24, 14);
       cyl(g, 0.03, 0.05, m.poly, 0, 0.13, 0.08, 14);
-      const lens = new THREE.Mesh(new THREE.CircleGeometry(0.03, 14), m.glass);
+      const lens = new THREE.Mesh(new THREE.CircleGeometry(0.03, 18), m.scopeGlass);
       lens.position.set(0, 0.13, -0.276); lens.rotation.y = Math.PI; g.add(lens);
+      const eye = new THREE.Mesh(new THREE.CircleGeometry(0.027, 18), m.scopeGlass);
+      eye.position.set(0, 0.13, 0.106); g.add(eye);
       box(g, 0.02, 0.05, 0.02, m.metal, 0, 0.09, -0.12); box(g, 0.02, 0.05, 0.02, m.metal, 0, 0.09, 0.0);
       sightY = 0.13; muzzleZ = -1.0;
     }
     const muzzle = new THREE.Object3D(); muzzle.position.set(0, id === 'sniper' ? 0.04 : 0.035, muzzleZ); g.add(muzzle);
-    return { group: g, muzzle, mag, sightY };
+    const port = new THREE.Object3D(); port.position.set(0.03, 0.045, -0.02); g.add(port);
+    return { group: g, muzzle, mag, sightY, port, hood: g.userData.hood };
   }
 
   // first-person rig: gun + gloved hands + sleeves, plus a flash sprite at the muzzle
@@ -131,7 +160,20 @@
     flash.position.copy(gun.muzzle.position); flash.position.z -= 0.06;
     flash.scale.setScalar(id === 'sniper' ? 0.35 : 0.24); flash.visible = false;
     rig.add(flash);
-    return { rig, muzzle: gun.muzzle, mag: gun.mag, magY: gun.mag.position.y, sightY: gun.sightY, flash };
+    // the flash: hot core sprite plus four flash-hider prongs seen from the side
+    const prongMat = new THREE.MeshBasicMaterial({ map: VG.Tex.prong(), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, color: new THREE.Color(0xffd29a).multiplyScalar(3) });
+    const prongs = new THREE.Group();
+    for (let k = 0; k < 4; k++) {
+      const pm = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.05), prongMat);
+      pm.geometry.translate(0.08, 0, 0); pm.rotation.set(0, Math.PI / 2, k * Math.PI / 2 + Math.PI / 4);
+      prongs.add(pm);
+    }
+    prongs.position.copy(gun.muzzle.position); prongs.visible = false; rig.add(prongs);
+    flash.material.color.multiplyScalar(3); // HDR so it blooms
+    // collimated red dot: lives on the camera axis far ahead, so it stays on the aim point while the sight sways
+    let dotFar = null;
+    if (id === 'ar') { dotFar = new THREE.Mesh(new THREE.CircleGeometry(0.075, 12), mats().dot); dotFar.renderOrder = 10; dotFar.visible = false; }
+    return { rig, muzzle: gun.muzzle, port: gun.port, hood: gun.hood, mag: gun.mag, magY: gun.mag.position.y, sightY: gun.sightY, flash, prongs, dotFar };
   };
 
   // simplified third-person gun for bots (shared geometry via clone)

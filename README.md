@@ -152,8 +152,24 @@ edge to sprint), drag the right side of the screen to look, and hold FIRE (drag 
 There are buttons for AIM, JUMP, CROUCH (slide while sprinting), R (reload) and ⇄ (switch weapon), plus
 STEADY while scoped and UAV / AIRSTRIKE when a streak is ready. Graphics default to Low on phones.
 
+**Graphics.** The *Graphics* setting (Low / Medium / High) scales the renderer:
+- **Post-processing (Medium and High):** filmic ACES tone mapping, ambient occlusion in the corners and under
+  objects, bloom on muzzle flashes, tracers, sparks and lamps, a lens pass (vignette, slight chromatic aberration,
+  film grain), and a soft blur at the screen edges while aiming down sights. High uses more AO samples and
+  4x MSAA. Low draws straight to the screen with none of these passes.
+- **Lighting and materials:** each level has a procedural sky used for reflections, exponential fog, and
+  soft sun shadows. Surfaces have normal and roughness maps, so asphalt, concrete and corrugated metal catch
+  the light. There are puddles, rubble, pallets, fences and trim on the walls.
+- **Weapons:** metal reflects the sky, edges are bevelled, and the red-dot sight's reticle stays on target.
+  Recoil is spring-driven, and the guns eject brass casings that bounce and tink on the floor.
+- **Soldiers:** jointed legs with knees, a plate carrier with pouches and a radio, knee and elbow pads, and a
+  helmet with night vision, headset, balaclava and goggles. Civilians in the campaign wear none of the gear.
+- **Effects:** layered muzzle flashes with smoke, tapered tracer ribbons, metal sparks that bounce, concrete
+  dust and debris chunks, and blood mist with splatter on nearby walls and floors. All effects are pooled,
+  so firing creates no new objects.
+
 Health regenerates after 4 seconds without damage. Headshots deal double damage (triple with the sniper),
 and bullets go through wooden crates and railings. Enemies show on the radar for a moment when they fire.
 Bots patrol, react to gunfire, strafe in fights and retreat to cover when they are hurt. Difficulty
 (Recruit / Regular / Veteran) changes their reaction time, accuracy and damage.
-Code: `games/vanguard/js/` (map, physics, nav, player, bots, weapons, fx, hud, audio, game).
+Code: `games/vanguard/js/` (map, physics, nav, player, bots, weapons, fx, post, textures, hud, audio, game).
