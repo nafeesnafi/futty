@@ -333,9 +333,9 @@
         continue;
       }
       e.score = s[12] | 0; e.health = s[9];
-      if (s[8] && !e.alive) e.spawnAt(s[1], s[2], s[3], s[4]);
+      if (s[8] && !e.alive) e.spawnAt(num(s[1]), num(s[2]), num(s[3]), num(s[4]));
       else if (!s[8] && e.alive) e.die(null);
-      e.setState(s[1], s[2], s[3], s[4], s[5], s[6], s[7]);
+      e.setState(num(s[1]), num(s[2]), num(s[3]), num(s[4]), num(s[5]), num(s[6], 1.8), s[7] | 0);
     }
   }
 

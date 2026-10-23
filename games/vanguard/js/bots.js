@@ -147,6 +147,7 @@
       this.radius = 0.35; this.height = 1.8; this.onGround = false; this.stepUp = 0;
       this.kills = 0; this.deaths = 0; this.score = 0; this.streak = 0;
       this.alive = false; this.health = 100; this.lastHit = -99; this.lastFired = -99;
+      this.walk = 0; this.stepT = 0; this.stepUp = 0; // animation state (network players never run the bot spawn code)
       this.buildModel(idx);
     }
 
@@ -475,7 +476,7 @@
       m.position.set(this.pos.x, this.pos.y - Math.max(0, this.stepUp), this.pos.z);
       this.stepUp *= Math.pow(0.001, dt);
       m.rotation.y = this.yaw;
-      this.walk += hs * dt * 2.6;
+      this.walk = (this.walk || 0) + (isFinite(hs) ? hs : 0) * dt * 2.6;
       const amt = Math.min(1, hs / 3), sw = Math.sin(this.walk) * amt * 0.6, cw = Math.cos(this.walk);
       this.legs[0].rotation.x = sw; this.legs[1].rotation.x = -sw;
       // knees flex while each leg swings forward, and stay soft when standing
